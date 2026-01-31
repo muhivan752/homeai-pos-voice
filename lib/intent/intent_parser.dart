@@ -1,34 +1,37 @@
 import 'intent.dart';
+import 'intent_type.dart';
+import 'intent_payload.dart';
+import 'dart:math';
 
 class IntentParser {
   Intent parse(String text) {
-    final normalized = text.toLowerCase().trim();
+    final id = _genId();
 
-    // jual <item> <qty>
-    final sellRegex = RegExp(r'jual\s+(.+?)\s+(\d+)$');
-    final sellMatch = sellRegex.firstMatch(normalized);
-
-    if (sellMatch != null) {
+    if (text.contains('jual')) {
       return Intent(
-        IntentType.sellItem,
-        {
-          'item': sellMatch.group(1),
-          'qty': int.parse(sellMatch.group(2)!),
-        },
+        id: id,
+        type: IntentType.sellItem,
+        payload: SellItemPayload(
+          item: 'kopi susu', // sementara hardcode
+          qty: 2,
+        ),
       );
     }
 
-    // checkout / bayar
-    if (normalized.contains('checkout') || normalized.contains('bayar')) {
+    if (text.contains('checkout') || text.contains('bayar')) {
       return Intent(
-        IntentType.checkout,
-        {},
+        id: id,
+        type: IntentType.checkout,
+        payload: CheckoutPayload(),
       );
     }
 
     return Intent(
-      IntentType.unknown,
-      {},
+      id: id,
+      type: IntentType.unknown,
+      payload: UnknownPayload(),
     );
   }
+
+  String _genId() => Random().nextInt(999999).toString();
 }
