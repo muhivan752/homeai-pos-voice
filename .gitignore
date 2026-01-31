@@ -1,0 +1,16 @@
+# Dart
+.dart_tool/
+.packages
+pubspec.lock
+*.snapshot
+
+# Environment (JANGAN COMMIT!)
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Build
+build/
