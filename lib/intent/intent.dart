@@ -6,7 +6,7 @@ enum IntentType {
 
 class Intent {
   final IntentType type;
-  final Map<String, dynamic> payload;
+  final IntentPayload payload;
 
   Intent(this.type, this.payload);
 }
