@@ -1,0 +1,14 @@
+{
+  "roots": [
+    "homeai_voice"
+  ],
+  "packages": [
+    {
+      "name": "homeai_voice",
+      "version": "0.0.1",
+      "dependencies": [],
+      "devDependencies": []
+    }
+  ],
+  "configVersion": 1
+}
