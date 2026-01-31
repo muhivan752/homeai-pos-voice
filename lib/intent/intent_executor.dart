@@ -1,26 +1,27 @@
-import '../core/erp_sales_adapter.dart';
 import 'intent.dart';
+import 'intent_type.dart';
+import 'intent_payload.dart';
+import 'intent_port.dart';
 
 class IntentExecutor {
-  final ErpSalesAdapter erp;
+  final IntentPort port;
 
-  IntentExecutor(this.erp);
+  IntentExecutor(this.port);
 
-  void execute(Intent intent) {
+  Future<void> execute(Intent intent) async {
     switch (intent.type) {
       case IntentType.sellItem:
-        erp.addItem(
-          item: intent.payload['item'],
-          qty: intent.payload['qty'],
-        );
+        final payload = intent.payload as SellItemPayload;
+        await port.sellItem(payload);
         break;
 
       case IntentType.checkout:
-        erp.checkout();
+        await port.checkout();
         break;
 
-      default:
-        print('[EXEC] unknown intent');
+      case IntentType.unknown:
+        print('[WARN] Unknown intent ${intent.id}');
+        break;
     }
   }
 }
