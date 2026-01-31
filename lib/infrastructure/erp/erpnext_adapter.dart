@@ -3,64 +3,86 @@ import 'package:http/http.dart' as http;
 
 import '../../intent/intent_port.dart';
 import '../../intent/intent_payload.dart';
+import 'erpnext_config.dart';
 
 /// ERPNext adapter yang implement IntentPort.
 /// Semua integrasi ERPNext HARUS lewat adapter ini.
 class ERPNextAdapter implements IntentPort {
-  final String baseUrl;
-  final String apiKey;
-  final String apiSecret;
+  final ERPNextConfig config;
+  final http.Client _client;
 
-  ERPNextAdapter({
-    required this.baseUrl,
-    required this.apiKey,
-    required this.apiSecret,
-  });
+  /// Current draft invoice name (untuk checkout)
+  String? _currentInvoiceName;
+
+  ERPNextAdapter(this.config, {http.Client? client})
+      : _client = client ?? http.Client();
 
   Map<String, String> get _headers => {
-        'Authorization': 'token $apiKey:$apiSecret',
+        'Authorization': 'token ${config.apiKey}:${config.apiSecret}',
         'Content-Type': 'application/json',
       };
 
   @override
   Future<void> sellItem(SellItemPayload payload) async {
-    // Untuk POS, kita tambahkan item ke draft invoice
-    // atau buat baru jika belum ada
-    final url = Uri.parse('$baseUrl/api/resource/POS Invoice');
+    final url = Uri.parse('${config.baseUrl}/api/resource/POS Invoice');
 
     final body = {
       'doctype': 'POS Invoice',
-      'customer': 'Walk-in Customer',
+      'customer': config.defaultCustomer,
+      'pos_profile': config.posProfile,
       'items': [
         {
-          'item_code': payload.item,
+          'item_code': _mapItemCode(payload.item),
           'qty': payload.qty,
+          'warehouse': config.warehouse,
         }
       ],
     };
 
-    final res = await http.post(url, headers: _headers, body: jsonEncode(body));
+    final res = await _client.post(
+      url,
+      headers: _headers,
+      body: jsonEncode(body),
+    );
 
     if (res.statusCode != 200 && res.statusCode != 201) {
-      throw ERPNextError(
-        'sellItem failed: ${res.statusCode} ${res.body}',
-      );
+      throw ERPNextError('sellItem failed: ${res.statusCode} ${res.body}');
     }
+
+    // Extract invoice name dari response untuk checkout nanti
+    final data = jsonDecode(res.body);
+    _currentInvoiceName = data['data']?['name'];
   }
 
   @override
   Future<void> checkout() async {
-    // Submit POS Invoice (finalize transaction)
-    // Dalam implementasi real, perlu track invoice yang sedang aktif
-    final url = Uri.parse('$baseUrl/api/method/erpnext.selling.doctype.pos_invoice.pos_invoice.submit_invoice');
+    if (_currentInvoiceName == null) {
+      throw ERPNextError('checkout failed: no active invoice');
+    }
 
-    final res = await http.post(url, headers: _headers);
+    final url = Uri.parse(
+      '${config.baseUrl}/api/resource/POS Invoice/$_currentInvoiceName',
+    );
+
+    // Submit invoice
+    final res = await _client.put(
+      url,
+      headers: _headers,
+      body: jsonEncode({'docstatus': 1}),
+    );
 
     if (res.statusCode != 200) {
-      throw ERPNextError(
-        'checkout failed: ${res.statusCode} ${res.body}',
-      );
+      throw ERPNextError('checkout failed: ${res.statusCode} ${res.body}');
     }
+
+    // Clear state setelah checkout
+    _currentInvoiceName = null;
+  }
+
+  /// Mapping naive: "kopi susu" → "kopi_susu"
+  /// TODO: Implement proper item lookup dari ERPNext
+  String _mapItemCode(String item) {
+    return item.toLowerCase().replaceAll(' ', '_');
   }
 }
 

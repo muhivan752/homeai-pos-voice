@@ -4,6 +4,8 @@ import '../lib/application/intent_executor.dart';
 import '../lib/infrastructure/auth/auth_context.dart';
 import '../lib/infrastructure/auth/role_gatekeeper.dart';
 import '../lib/infrastructure/erp/mock_erpnext_adapter.dart';
+import '../lib/infrastructure/erp/erpnext_adapter.dart';
+import '../lib/infrastructure/erp/erpnext_config.dart';
 import '../lib/application/pos_voice_service.dart';
 import '../lib/ui/pos_screen.dart';
 
@@ -15,10 +17,29 @@ import '../lib/ui/pos_screen.dart';
 /// 3. PosVoiceService di-inject ke UI
 /// 4. UI TIDAK BOLEH tahu tentang Parser, Executor, atau ERP adapter
 void main() async {
+  // === CONFIGURATION ===
+  // Set true untuk mock (demo tanpa server)
+  // Set false untuk ERPNext REAL
+  const useMock = true;
+
   // === INFRASTRUCTURE LAYER ===
-  // Gunakan MockERPNextAdapter untuk demo (tanpa server)
-  // Ganti ke ERPNextAdapter untuk production
-  final IntentPort erpAdapter = MockERPNextAdapter();
+  final IntentPort erpAdapter;
+
+  if (useMock) {
+    erpAdapter = MockERPNextAdapter();
+    print('[MODE] Mock - tanpa ERPNext server\n');
+  } else {
+    // TODO: Load config dari environment/file
+    final config = ERPNextConfig(
+      baseUrl: 'http://localhost:8000',
+      apiKey: 'YOUR_API_KEY',
+      apiSecret: 'YOUR_API_SECRET',
+      posProfile: 'POS-001',
+      warehouse: 'Stores - ABC',
+    );
+    erpAdapter = ERPNextAdapter(config);
+    print('[MODE] ERPNext REAL - ${config.baseUrl}\n');
+  }
 
   // Parser dan Executor
   final parser = IntentParser();
