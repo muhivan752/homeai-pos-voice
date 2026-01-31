@@ -64,8 +64,13 @@ void main() async {
   // === UI LAYER ===
   final screen = PosScreen(service: service);
 
-  // === DEMO: Phase 1 - Core Voice Commerce ===
-  print('=== HomeAI POS Voice - Phase 1 Demo ===\n');
+  // === DEMO: Phase 1 - Core Voice Commerce (HARDENED) ===
+  print('=== HomeAI POS Voice - Phase 1 Demo (HARDENED) ===\n');
+
+  // ══════════════════════════════════════════════════════════════
+  // TEST 1: Happy Path - Normal Operations
+  // ══════════════════════════════════════════════════════════════
+  print('\n--- TEST 1: Happy Path ---\n');
 
   // Add items
   await screen.onVoiceInput('jual kopi susu 2');
@@ -76,23 +81,85 @@ void main() async {
   await screen.onVoiceInput('isi keranjang');
   await screen.onVoiceInput('totalnya berapa');
 
-  // Modify cart
-  await screen.onVoiceInput('kopi susu jadi 3');
-  await screen.onVoiceInput('batal es teh');
-  await screen.onVoiceInput('total');
+  // ══════════════════════════════════════════════════════════════
+  // TEST 2: Failure Cases - ERP Errors
+  // ══════════════════════════════════════════════════════════════
+  print('\n--- TEST 2: Failure Cases ---\n');
 
-  // Undo
+  // 2a. Unknown item (tidak ada di catalog)
+  print('[TEST] Unknown item:');
+  await screen.onVoiceInput('jual martabak 1');
+
+  // 2b. Stock habis (latte = 0)
+  print('[TEST] Stock habis:');
+  await screen.onVoiceInput('pesan latte');
+
+  // 2c. Stock tidak cukup (es teh sisa 4, minta 10)
+  print('[TEST] Stock tidak cukup:');
+  await screen.onVoiceInput('jual es teh 10');
+
+  // 2d. Remove item yang tidak ada di cart
+  print('[TEST] Remove non-existent:');
+  await screen.onVoiceInput('batal cappuccino');
+
+  // ══════════════════════════════════════════════════════════════
+  // TEST 3: Undo Scope - KRITIS!
+  // ══════════════════════════════════════════════════════════════
+  print('\n--- TEST 3: Undo Scope (KRITIS) ---\n');
+
+  // 3a. Undo setelah add (HARUS BERHASIL)
+  print('[TEST] Undo setelah add:');
   await screen.onVoiceInput('undo');
   await screen.onVoiceInput('keranjang');
 
-  // Checkout
+  // 3b. changeQty (ini clear undo stack)
+  print('[TEST] changeQty (clears undo):');
+  await screen.onVoiceInput('kopi susu jadi 3');
+
+  // 3c. Undo setelah changeQty (HARUS GAGAL!)
+  print('[TEST] Undo setelah changeQty (HARUS GAGAL):');
+  await screen.onVoiceInput('undo');
+
+  // 3d. Add lagi, lalu clear cart
+  print('[TEST] clearCart (clears undo):');
+  await screen.onVoiceInput('jual cappuccino 1');
+  await screen.onVoiceInput('kosongkan');
+
+  // 3e. Undo setelah clearCart (HARUS GAGAL!)
+  print('[TEST] Undo setelah clearCart (HARUS GAGAL):');
+  await screen.onVoiceInput('undo');
+
+  // ══════════════════════════════════════════════════════════════
+  // TEST 4: Edge Cases
+  // ══════════════════════════════════════════════════════════════
+  print('\n--- TEST 4: Edge Cases ---\n');
+
+  // 4a. Checkout dengan keranjang kosong
+  print('[TEST] Checkout kosong:');
   await screen.onVoiceInput('bayar');
 
-  // Help
-  await screen.onVoiceInput('bantuan');
+  // 4b. Clear cart yang sudah kosong
+  print('[TEST] Clear kosong:');
+  await screen.onVoiceInput('kosongkan');
 
-  // Unknown
+  // 4c. Undo saat stack kosong
+  print('[TEST] Undo kosong:');
+  await screen.onVoiceInput('undo');
+
+  // ══════════════════════════════════════════════════════════════
+  // TEST 5: Full Transaction (Proof of Concept)
+  // ══════════════════════════════════════════════════════════════
+  print('\n--- TEST 5: Full Transaction ---\n');
+
+  await screen.onVoiceInput('jual kopi susu 2');
+  await screen.onVoiceInput('tambah americano 1');
+  await screen.onVoiceInput('total');
+  await screen.onVoiceInput('bayar');
+
+  // Help dan unknown
+  print('\n--- Help & Unknown ---\n');
+  await screen.onVoiceInput('bantuan');
   await screen.onVoiceInput('perintah aneh xyz');
 
-  print('\n=== Demo selesai ===');
+  print('\n=== Demo selesai - SEMUA TEST PASSED jika error muncul di tempat yang benar ===');
 }
