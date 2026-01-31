@@ -1,7 +1,7 @@
 import '../intent/intent.dart';
 import '../intent/intent_type.dart';
 import '../infrastructure/intent_parser.dart';
-import '../infrastructure/intent_executor.dart';
+import 'intent_executor.dart';
 import '../infrastructure/auth/auth_context.dart';
 import '../infrastructure/auth/role_gatekeeper.dart';
 

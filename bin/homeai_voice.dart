@@ -1,6 +1,6 @@
 import '../lib/intent/intent_port.dart';
 import '../lib/infrastructure/intent_parser.dart';
-import '../lib/infrastructure/intent_executor.dart';
+import '../lib/application/intent_executor.dart';
 import '../lib/infrastructure/auth/auth_context.dart';
 import '../lib/infrastructure/auth/role_gatekeeper.dart';
 import '../lib/infrastructure/erp/erpnext_adapter.dart';
