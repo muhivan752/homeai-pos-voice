@@ -2,24 +2,56 @@ import '../../intent/intent.dart';
 import '../../intent/intent_type.dart';
 import 'auth_context.dart';
 
-/// Role-based access control untuk intent.
+/// Phase 1: Role-based access control untuk intent.
 /// Menentukan role mana yang boleh execute intent tertentu.
 class RoleGatekeeper {
   bool allow(UserRole role, Intent intent) {
     switch (role) {
       case UserRole.barista:
-        // Barista hanya bisa sellItem dan checkout
-        return intent.type == IntentType.sellItem ||
-            intent.type == IntentType.checkout;
+        return _baristaAllowed.contains(intent.type);
 
       case UserRole.spv:
-        // SPV bisa semua yang barista bisa + future intents
-        return intent.type == IntentType.sellItem ||
-            intent.type == IntentType.checkout;
+        return _spvAllowed.contains(intent.type);
 
       case UserRole.owner:
         // Owner bisa semua
         return true;
     }
   }
+
+  /// Phase 1: Barista allowed intents
+  /// - Semua cart operations
+  /// - Checkout
+  /// - Inquiry (read-only)
+  static const _baristaAllowed = {
+    // Cart
+    IntentType.addItem,
+    IntentType.removeItem,
+    IntentType.changeQty,
+    IntentType.clearCart,
+    IntentType.undoLast,
+    // Checkout
+    IntentType.checkout,
+    // Inquiry
+    IntentType.readTotal,
+    IntentType.readCart,
+  };
+
+  /// Phase 1: SPV allowed intents
+  /// - Semua yang barista bisa
+  /// - (Phase 2: discount, payment method)
+  /// - (Phase 4: session management)
+  static const _spvAllowed = {
+    // Semua barista intents
+    IntentType.addItem,
+    IntentType.removeItem,
+    IntentType.changeQty,
+    IntentType.clearCart,
+    IntentType.undoLast,
+    IntentType.checkout,
+    IntentType.readTotal,
+    IntentType.readCart,
+    // Phase 2 (nanti): applyDiscount, selectPayment
+    // Phase 4 (nanti): openShift, closeShift
+  };
 }

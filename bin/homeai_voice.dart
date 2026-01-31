@@ -20,11 +20,10 @@ import '../lib/ui/pos_screen.dart';
 /// 4. UI TIDAK BOLEH tahu tentang Parser, Executor, atau ERP adapter
 ///
 /// USAGE:
-///   Mock mode:  USE_MOCK=true dart run
-///   Real mode:  source .env && dart run
+///   Mock mode:  dart run
+///   Real mode:  source .env && USE_MOCK=false dart run
 void main() async {
   // === CONFIGURATION ===
-  // Load dari environment variable, default ke mock
   final useMock = Platform.environment['USE_MOCK']?.toLowerCase() != 'false';
 
   // === INFRASTRUCTURE LAYER ===
@@ -41,7 +40,7 @@ void main() async {
     } on ConfigError catch (e) {
       print('[ERROR] $e');
       print('[HINT] Copy .env.example to .env and fill in your values');
-      print('[HINT] Then run: source .env && dart run');
+      print('[HINT] Then run: source .env && USE_MOCK=false dart run');
       exit(1);
     }
   }
@@ -65,13 +64,35 @@ void main() async {
   // === UI LAYER ===
   final screen = PosScreen(service: service);
 
-  // === DEMO: Simulate voice commands ===
-  print('=== HomeAI POS Voice Demo ===\n');
+  // === DEMO: Phase 1 - Core Voice Commerce ===
+  print('=== HomeAI POS Voice - Phase 1 Demo ===\n');
 
+  // Add items
   await screen.onVoiceInput('jual kopi susu 2');
-  await screen.onVoiceInput('jual es teh 1');
+  await screen.onVoiceInput('tambah es teh 1');
+  await screen.onVoiceInput('pesan americano');
+
+  // Read cart
+  await screen.onVoiceInput('isi keranjang');
+  await screen.onVoiceInput('totalnya berapa');
+
+  // Modify cart
+  await screen.onVoiceInput('kopi susu jadi 3');
+  await screen.onVoiceInput('batal es teh');
+  await screen.onVoiceInput('total');
+
+  // Undo
+  await screen.onVoiceInput('undo');
+  await screen.onVoiceInput('keranjang');
+
+  // Checkout
   await screen.onVoiceInput('bayar');
-  await screen.onVoiceInput('perintah tidak dikenal xyz');
+
+  // Help
+  await screen.onVoiceInput('bantuan');
+
+  // Unknown
+  await screen.onVoiceInput('perintah aneh xyz');
 
   print('\n=== Demo selesai ===');
 }

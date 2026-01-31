@@ -1,11 +1,11 @@
-import '../intent/intent.dart';
 import '../intent/intent_type.dart';
 import '../infrastructure/intent_parser.dart';
 import 'intent_executor.dart';
 import '../infrastructure/auth/auth_context.dart';
 import '../infrastructure/auth/role_gatekeeper.dart';
 
-/// PosVoiceService - Single orchestration point untuk voice commands.
+/// Phase 1: Core Voice Commerce Service
+/// Single orchestration point untuk voice commands.
 ///
 /// UI layer HANYA boleh import dan memanggil class ini.
 /// Semua wiring dependency dilakukan di entrypoint (bin/).
@@ -26,45 +26,46 @@ class PosVoiceService {
         _auth = auth;
 
   /// Handle voice command dari UI.
-  /// Returns VoiceResult yang bisa ditampilkan ke user.
+  /// Returns VoiceResult untuk voice feedback.
   Future<VoiceResult> handleVoice(String rawText) async {
     // 1. Parse text ke Intent
     final intent = _parser.parse(rawText);
 
-    // 2. Check unknown intent
-    if (intent.type == IntentType.unknown) {
-      return VoiceResult.error('Perintah tidak dikenali: "$rawText"');
+    // 2. Check authorization (kecuali untuk help & unknown)
+    if (intent.type != IntentType.help && intent.type != IntentType.unknown) {
+      if (!_gatekeeper.allow(_auth.role, intent)) {
+        return VoiceResult.error(
+          'Akses ditolak untuk ${_auth.role.name}',
+        );
+      }
     }
 
-    // 3. Check authorization
-    if (!_gatekeeper.allow(_auth.role, intent)) {
-      return VoiceResult.error(
-        'Akses ditolak untuk role ${_auth.role.name}',
-      );
-    }
-
-    // 4. Execute
+    // 3. Execute dan return result
     try {
-      await _executor.execute(intent);
-      return VoiceResult.success(_describeIntent(intent));
+      final result = await _executor.execute(intent);
+      return VoiceResult._(result.isSuccess, result.message);
     } catch (e) {
-      return VoiceResult.error(e.toString());
+      // Translate error ke bahasa manusia
+      return VoiceResult.error(_translateError(e.toString()));
     }
   }
 
-  String _describeIntent(Intent intent) {
-    switch (intent.type) {
-      case IntentType.sellItem:
-        return 'Item ditambahkan';
-      case IntentType.checkout:
-        return 'Checkout berhasil';
-      case IntentType.unknown:
-        return 'Unknown';
+  /// Translate technical error ke bahasa manusia
+  String _translateError(String error) {
+    // Network errors
+    if (error.contains('timeout') || error.contains('Timeout')) {
+      return 'Koneksi lambat. Coba lagi ya.';
     }
+    if (error.contains('Socket') || error.contains('connection')) {
+      return 'Tidak bisa konek ke server.';
+    }
+
+    // Business errors - sudah dalam bahasa Indonesia dari adapter
+    return error;
   }
 }
 
-/// Result dari voice command processing.
+/// Result dari voice command untuk feedback ke user.
 class VoiceResult {
   final bool isSuccess;
   final String message;
