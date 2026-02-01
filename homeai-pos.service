@@ -1,0 +1,23 @@
+[Unit]
+Description=HomeAI POS Voice Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/user/homeai-pos-voice
+Environment="PATH=/root/tools/flutter/bin:/root/tools/dart-sdk/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/root/tools/dart-sdk/bin/dart run bin/web_server.dart 8080
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening (optional, uncomment if needed)
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ProtectHome=read-only
+# ReadWritePaths=/home/user/homeai-pos-voice
+
+[Install]
+WantedBy=multi-user.target
