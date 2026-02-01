@@ -175,13 +175,28 @@ class ERPNextAdapter implements IntentPort {
     }
 
     try {
-      // Submit invoice (docstatus: 0 → 1)
+      // First, get the grand total
+      final total = await readTotal();
+
+      // Update payment amount and submit invoice
       final url = Uri.parse(
         '${config.baseUrl}/api/resource/POS Invoice/$_currentInvoiceName',
       );
 
       final res = await _client
-          .put(url, headers: _headers, body: jsonEncode({'docstatus': 1}))
+          .put(
+            url,
+            headers: _headers,
+            body: jsonEncode({
+              'payments': [
+                {
+                  'mode_of_payment': 'Cash',
+                  'amount': total.grandTotal,
+                }
+              ],
+              'docstatus': 1,
+            }),
+          )
           .timeout(_timeout);
 
       if (res.statusCode != 200) {
@@ -329,6 +344,13 @@ class ERPNextAdapter implements IntentPort {
       'customer': config.defaultCustomer,
       'pos_profile': config.posProfile,
       'items': items,
+      // POS Invoice requires at least one payment method
+      'payments': [
+        {
+          'mode_of_payment': 'Cash',
+          'amount': 0, // Will be updated on checkout
+        }
+      ],
     };
 
     final res = await _client

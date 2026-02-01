@@ -156,6 +156,12 @@ void main() async {
               'warehouse': warehouse,
             }
           ],
+          'payments': [
+            {
+              'mode_of_payment': 'Cash',
+              'amount': 0,
+            }
+          ],
         };
 
         final res1 = await http.post(
@@ -193,6 +199,12 @@ void main() async {
                 'item_code': itemCode,
                 'qty': 1,
                 'warehouse': actualWarehouse,
+              }
+            ],
+            'payments': [
+              {
+                'mode_of_payment': 'Cash',
+                'amount': 0,
               }
             ],
           };
