@@ -106,6 +106,16 @@ echo -e "${GREEN}   Build complete${NC}"
 # ============================================
 echo -e "${YELLOW}[6/7] Setting up systemd service...${NC}"
 
+# Stop existing service first
+systemctl stop homeai-pos 2>/dev/null || true
+
+# Kill any process using port 8080
+if lsof -i :8080 >/dev/null 2>&1; then
+  echo -e "${YELLOW}   Port 8080 in use, killing existing process...${NC}"
+  fuser -k 8080/tcp 2>/dev/null || true
+  sleep 2
+fi
+
 cat > /etc/systemd/system/homeai-pos.service << EOF
 [Unit]
 Description=HomeAI POS Voice Web Server
@@ -131,9 +141,16 @@ chown -R $SERVICE_USER:$SERVICE_USER $APP_DIR
 
 systemctl daemon-reload
 systemctl enable homeai-pos
-systemctl restart homeai-pos
+systemctl start homeai-pos
 
-echo -e "${GREEN}   Systemd service configured${NC}"
+# Wait and check status
+sleep 3
+if systemctl is-active --quiet homeai-pos; then
+  echo -e "${GREEN}   Systemd service configured and running${NC}"
+else
+  echo -e "${RED}   Service failed to start! Checking logs...${NC}"
+  journalctl -u homeai-pos -n 20 --no-pager
+fi
 
 # ============================================
 # 7. Setup Firewall (optional)

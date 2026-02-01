@@ -8,22 +8,50 @@ void main(List<String> args) async {
   final port = args.isNotEmpty ? int.tryParse(args[0]) ?? 8080 : 8080;
   final webDir = Directory('build/web');
 
+  print('HomeAI POS Web Server starting...');
+  print('Working directory: ${Directory.current.path}');
+  print('Port: $port');
+
   if (!await webDir.exists()) {
     print('ERROR: build/web not found. Run "flutter build web" first.');
+    print('Expected path: ${webDir.absolute.path}');
     exit(1);
   }
 
-  final server = await HttpServer.bind(
-    InternetAddress.anyIPv4,
-    port,
-  );
+  print('Web directory found: ${webDir.absolute.path}');
 
-  print('HomeAI POS Web Server');
-  print('Serving on http://0.0.0.0:$port');
-  print('Press Ctrl+C to stop');
+  try {
+    final server = await HttpServer.bind(
+      InternetAddress.anyIPv4,
+      port,
+    );
 
-  await for (final request in server) {
-    await _handleRequest(request, webDir.path);
+    print('HomeAI POS Web Server');
+    print('Serving on http://0.0.0.0:$port');
+    print('Press Ctrl+C to stop');
+
+    await for (final request in server) {
+      try {
+        await _handleRequest(request, webDir.path);
+      } catch (e, stack) {
+        print('Error handling request: $e');
+        print(stack);
+      }
+    }
+  } on SocketException catch (e) {
+    print('ERROR: Cannot bind to port $port');
+    print('Reason: ${e.message}');
+    print('');
+    print('Possible solutions:');
+    print('  1. Check if port $port is already in use: sudo lsof -i :$port');
+    print('  2. Kill the process using the port');
+    print('  3. Use a different port');
+    exit(2);
+  } catch (e, stack) {
+    print('ERROR: Failed to start server');
+    print('Exception: $e');
+    print(stack);
+    exit(3);
   }
 }
 
