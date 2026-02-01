@@ -178,12 +178,12 @@ class ERPNextAdapter implements IntentPort {
       // First, get the grand total
       final total = await readTotal();
 
-      // Update payment amount and submit invoice
       final url = Uri.parse(
         '${config.baseUrl}/api/resource/POS Invoice/$_currentInvoiceName',
       );
 
-      final res = await _client
+      // Step 1: Update payment amount to match grand total
+      final updateRes = await _client
           .put(
             url,
             headers: _headers,
@@ -194,13 +194,25 @@ class ERPNextAdapter implements IntentPort {
                   'amount': total.grandTotal,
                 }
               ],
-              'docstatus': 1,
             }),
           )
           .timeout(_timeout);
 
-      if (res.statusCode != 200) {
-        throw ERPNextError(_parseError(res, 'Checkout gagal'));
+      if (updateRes.statusCode != 200) {
+        throw ERPNextError(_parseError(updateRes, 'Gagal update payment'));
+      }
+
+      // Step 2: Submit invoice (docstatus: 0 → 1)
+      final submitRes = await _client
+          .put(
+            url,
+            headers: _headers,
+            body: jsonEncode({'docstatus': 1}),
+          )
+          .timeout(_timeout);
+
+      if (submitRes.statusCode != 200) {
+        throw ERPNextError(_parseError(submitRes, 'Checkout gagal'));
       }
 
       print('[ERPNext] === CHECKOUT BERHASIL ===');
