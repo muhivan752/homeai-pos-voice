@@ -65,7 +65,7 @@ class VoiceFeedback extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(PosTheme.paddingSmall),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.white.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(PosTheme.radiusSmall),
               ),
               child: Text(
@@ -186,7 +186,7 @@ class _PulsingDotState extends State<_PulsingDot>
           height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: widget.color.withValues(alpha: 0.3 + (_controller.value * 0.7)),
+            color: widget.color.withOpacity(0.3 + (_controller.value * 0.7)),
           ),
           child: Center(
             child: Container(

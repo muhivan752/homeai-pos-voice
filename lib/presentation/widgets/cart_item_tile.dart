@@ -36,7 +36,7 @@ class CartItemTile extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: PosTheme.primary.withValues(alpha: 0.1),
+                color: PosTheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(PosTheme.radiusSmall),
               ),
               child: Center(

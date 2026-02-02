@@ -134,7 +134,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
     final isWideScreen = screenWidth > 900;
 
     return Scaffold(
-      backgroundColor: PosTheme.customerAccent.withValues(alpha: 0.03),
+      backgroundColor: PosTheme.customerAccent.withOpacity(0.03),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -441,7 +441,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
           Icon(
             Icons.shopping_cart_outlined,
             size: 80,
-            color: PosTheme.textMuted.withValues(alpha: 0.5),
+            color: PosTheme.textMuted.withOpacity(0.5),
           ),
           const SizedBox(height: PosTheme.paddingMedium),
           Text(
@@ -464,9 +464,9 @@ class _CustomerScreenState extends State<CustomerScreen> {
     return Container(
       padding: const EdgeInsets.all(PosTheme.paddingLarge),
       decoration: BoxDecoration(
-        color: PosTheme.customerAccent.withValues(alpha: 0.1),
+        color: PosTheme.customerAccent.withOpacity(0.1),
         borderRadius: BorderRadius.circular(PosTheme.radiusMedium),
-        border: Border.all(color: PosTheme.customerAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: PosTheme.customerAccent.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

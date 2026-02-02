@@ -345,7 +345,7 @@ class _StaffScreenState extends State<StaffScreen> {
             Icon(
               Icons.shopping_cart_outlined,
               size: 64,
-              color: PosTheme.textMuted.withValues(alpha: 0.5),
+              color: PosTheme.textMuted.withOpacity(0.5),
             ),
             const SizedBox(height: PosTheme.paddingMedium),
             Text(
@@ -468,7 +468,7 @@ class _StaffScreenState extends State<StaffScreen> {
         children: [
           // User avatar
           CircleAvatar(
-            backgroundColor: PosTheme.primary.withValues(alpha: 0.1),
+            backgroundColor: PosTheme.primary.withOpacity(0.1),
             child: Text(
               widget.auth.userName?.substring(0, 1).toUpperCase() ??
                   widget.auth.role.displayName.substring(0, 1),

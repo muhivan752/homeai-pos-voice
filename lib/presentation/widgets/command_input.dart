@@ -106,7 +106,7 @@ class _CommandInputState extends State<CommandInput> {
               icon: const Icon(Icons.send),
               color: PosTheme.primary,
               style: IconButton.styleFrom(
-                backgroundColor: PosTheme.primary.withValues(alpha: 0.1),
+                backgroundColor: PosTheme.primary.withOpacity(0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(PosTheme.radiusSmall),
                 ),

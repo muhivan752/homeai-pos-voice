@@ -170,7 +170,7 @@ class _ProductCatalogState extends State<ProductCatalog>
           Icon(
             Icons.inventory_2_outlined,
             size: 64,
-            color: PosTheme.textMuted.withValues(alpha: 0.5),
+            color: PosTheme.textMuted.withOpacity(0.5),
           ),
           const SizedBox(height: PosTheme.paddingMedium),
           Text(

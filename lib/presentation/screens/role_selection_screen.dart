@@ -130,10 +130,10 @@ class _ModeCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: PosTheme.surface,
             borderRadius: BorderRadius.circular(PosTheme.radiusLarge),
-            border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
+            border: Border.all(color: color.withOpacity(0.3), width: 2),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.1),
+                color: color.withOpacity(0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -145,7 +145,7 @@ class _ModeCard extends StatelessWidget {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 50, color: color),
@@ -299,7 +299,7 @@ class _RoleChip extends StatelessWidget {
       label: Text(role.displayName),
       selected: selected,
       onSelected: (_) => onSelected(),
-      selectedColor: PosTheme.primary.withValues(alpha: 0.2),
+      selectedColor: PosTheme.primary.withOpacity(0.2),
       labelStyle: TextStyle(
         color: selected ? PosTheme.primary : PosTheme.textPrimary,
         fontWeight: selected ? FontWeight.w600 : FontWeight.normal,

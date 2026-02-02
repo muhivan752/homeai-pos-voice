@@ -100,7 +100,7 @@ class _VoiceButtonState extends State<VoiceButton>
             color: _backgroundColor,
             boxShadow: [
               BoxShadow(
-                color: _backgroundColor.withValues(alpha: 0.4),
+                color: _backgroundColor.withOpacity(0.4),
                 blurRadius: widget.state == VoiceButtonState.listening ? 20 : 10,
                 spreadRadius:
                     widget.state == VoiceButtonState.listening ? 2 : 0,

@@ -36,7 +36,7 @@ class ProductCard extends StatelessWidget {
             boxShadow: isAvailable
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withOpacity(0.05),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -64,8 +64,8 @@ class ProductCard extends StatelessWidget {
             height: 60,
             decoration: BoxDecoration(
               color: isAvailable
-                  ? PosTheme.primary.withValues(alpha: 0.1)
-                  : PosTheme.textMuted.withValues(alpha: 0.1),
+                  ? PosTheme.primary.withOpacity(0.1)
+                  : PosTheme.textMuted.withOpacity(0.1),
               borderRadius: BorderRadius.circular(PosTheme.radiusSmall),
             ),
             child: Icon(
@@ -137,8 +137,8 @@ class ProductCard extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: isAvailable
-                  ? PosTheme.primary.withValues(alpha: 0.1)
-                  : PosTheme.textMuted.withValues(alpha: 0.1),
+                  ? PosTheme.primary.withOpacity(0.1)
+                  : PosTheme.textMuted.withOpacity(0.1),
               borderRadius: BorderRadius.circular(PosTheme.radiusSmall),
             ),
             child: Icon(
