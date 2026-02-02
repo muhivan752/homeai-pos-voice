@@ -1,5 +1,7 @@
+import '../intent/intent.dart';
 import '../intent/intent_parser.dart';
 import '../intent/intent_executor.dart';
+import '../intent/intent_type.dart';
 import '../core/auth_context.dart';
 import '../core/role_gatekeeper.dart';
 
@@ -15,10 +17,10 @@ class VoiceCommandCoordinator {
   });
 
   Future<void> handleVoice(String rawText) async {
-    final intent = parser.parseCommand(rawText);
+    final intent = parser.parse(rawText);
 
-    if (!intent.isValid) {
-      _respondError(intent.error!);
+    if (intent.type == IntentType.unknown) {
+      _respondError('INTENT_TIDAK_DIKENALI');
       return;
     }
 
@@ -35,7 +37,7 @@ class VoiceCommandCoordinator {
     }
   }
 
-  void _respondSuccess(intent) {
+  void _respondSuccess(Intent intent) {
     print('✅ Berhasil: ${intent.type}');
   }
 
