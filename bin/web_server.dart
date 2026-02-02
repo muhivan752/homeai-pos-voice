@@ -3,9 +3,12 @@ import 'dart:io';
 /// Simple HTTP server to serve Flutter web build.
 ///
 /// Usage: dart run bin/web_server.dart [port]
-/// Default port: 8080
+/// Default port: 8080 (can be overridden via PORT environment variable)
 void main(List<String> args) async {
-  final port = args.isNotEmpty ? int.tryParse(args[0]) ?? 8080 : 8080;
+  // Priority: CLI arg > PORT env var > default 8080
+  final envPort = Platform.environment['PORT'];
+  final defaultPort = envPort != null ? int.tryParse(envPort) ?? 8080 : 8080;
+  final port = args.isNotEmpty ? int.tryParse(args[0]) ?? defaultPort : defaultPort;
   final webDir = Directory('build/web');
 
   print('HomeAI POS Web Server starting...');
