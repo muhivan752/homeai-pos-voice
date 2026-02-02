@@ -52,6 +52,9 @@ class SpeechService {
         onStatus: _handleStatus,
         onError: _handleError,
         debugLogging: false,
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => false,
       );
 
       if (_isInitialized) {

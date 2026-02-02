@@ -66,26 +66,50 @@ class TtsService {
         _isSpeaking = false;
       });
 
-      // Configure TTS
-      await _tts.setLanguage(_language);
-      await _tts.setVolume(_volume);
-      await _tts.setSpeechRate(_rate);
-      await _tts.setPitch(_pitch);
+      // Configure TTS with timeout
+      await _tts.setLanguage(_language).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
+      await _tts.setVolume(_volume).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      await _tts.setSpeechRate(_rate).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      await _tts.setPitch(_pitch).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
 
-      // Check if language is available
-      final languages = await _tts.getLanguages;
-      final hasIndonesian = (languages as List).any((lang) =>
-          lang.toString().toLowerCase().contains('id'));
+      // Check if language is available with timeout
+      try {
+        final languages = await _tts.getLanguages.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => <dynamic>[],
+        );
+        final hasIndonesian = (languages as List).any((lang) =>
+            lang.toString().toLowerCase().contains('id'));
 
-      if (!hasIndonesian) {
-        // Fallback to English if Indonesian not available
-        _language = 'en-US';
-        await _tts.setLanguage(_language);
+        if (!hasIndonesian) {
+          // Fallback to English if Indonesian not available
+          _language = 'en-US';
+          await _tts.setLanguage(_language).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => null,
+          );
+        }
+      } catch (_) {
+        // Ignore language detection errors, continue with default
       }
 
       _isInitialized = true;
       return true;
     } catch (e) {
+      // Mark as initialized anyway to prevent blocking
+      _isInitialized = true;
       onError?.call('Gagal inisialisasi TTS: $e');
       return false;
     }

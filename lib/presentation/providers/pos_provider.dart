@@ -74,11 +74,25 @@ class PosProvider extends ChangeNotifier {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // Initialize speech
-    _isSpeechAvailable = await _speech.initialize();
+    try {
+      // Initialize speech with timeout
+      _isSpeechAvailable = await _speech.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => false,
+      );
+    } catch (e) {
+      _isSpeechAvailable = false;
+    }
 
-    // Initialize TTS
-    await _tts.initialize();
+    try {
+      // Initialize TTS with timeout
+      await _tts.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => false,
+      );
+    } catch (e) {
+      // TTS initialization failed, continue without TTS
+    }
 
     _isInitialized = true;
     notifyListeners();

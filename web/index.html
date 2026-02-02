@@ -80,6 +80,32 @@
   </div>
 
   <script>
+    // Hide loading screen when Flutter is ready
+    function hideLoading() {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        loading.style.display = 'none';
+      }
+    }
+
+    // Show error message
+    function showError(message) {
+      var loadingText = document.querySelector('.loading-text');
+      var spinner = document.querySelector('.spinner');
+      if (loadingText) {
+        loadingText.textContent = message;
+        loadingText.style.color = '#ff6b6b';
+      }
+      if (spinner) {
+        spinner.style.display = 'none';
+      }
+    }
+
+    // Set timeout for loading
+    var loadTimeout = setTimeout(function() {
+      showError('Gagal memuat aplikasi. Coba refresh halaman.');
+    }, 30000); // 30 second timeout
+
     window.addEventListener('load', function(ev) {
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
@@ -88,11 +114,25 @@
         },
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
+            clearTimeout(loadTimeout);
             appRunner.runApp();
+            // Hide loading after a short delay to ensure Flutter has rendered
+            setTimeout(hideLoading, 100);
+          }).catch(function(error) {
+            clearTimeout(loadTimeout);
+            console.error('Failed to initialize engine:', error);
+            showError('Gagal memuat aplikasi: ' + error.message);
           });
         }
       });
     });
+
+    // Global error handler
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error('Error:', message);
+      showError('Terjadi error: ' + message);
+      return true;
+    };
   </script>
 </body>
 </html>
