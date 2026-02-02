@@ -308,6 +308,78 @@ class ERPNextAdapter implements ERPPort {
     }
   }
 
+  @override
+  Future<List<Product>> getCatalog() async {
+    try {
+      // Fetch items from ERPNext with POS Item Group filter
+      final url = Uri.parse(
+        '${config.baseUrl}/api/resource/Item?'
+        'filters=[["disabled","=",0],["is_sales_item","=",1]]'
+        '&fields=["item_code","item_name","standard_rate","item_group","image"]'
+        '&limit_page_length=100',
+      );
+
+      final res = await _client.get(url, headers: _headers).timeout(_timeout);
+
+      if (res.statusCode != 200) {
+        throw ERPNextError(_parseError(res, 'Gagal mengambil katalog'));
+      }
+
+      final data = jsonDecode(res.body)['data'] as List? ?? [];
+
+      // Fetch stock for each item from warehouse
+      final products = <Product>[];
+      for (final item in data) {
+        final itemCode = item['item_code'] as String?;
+        if (itemCode == null) continue;
+
+        // Get stock from warehouse
+        final stock = await _getItemStock(itemCode);
+
+        products.add(Product(
+          name: item['item_name'] ?? itemCode,
+          code: itemCode,
+          price: (item['standard_rate'] ?? 0).toDouble(),
+          stock: stock,
+          category: item['item_group'] ?? 'Lainnya',
+          imageUrl: item['image'] as String?,
+        ));
+      }
+
+      return products;
+    } on TimeoutException {
+      throw ERPNextError('Koneksi timeout saat mengambil katalog.');
+    } on SocketException {
+      throw ERPNextError('Tidak bisa terhubung ke server.');
+    } on http.ClientException catch (e) {
+      throw ERPNextError('Network error: ${e.message}');
+    }
+  }
+
+  /// Get stock quantity for an item from the configured warehouse
+  Future<int> _getItemStock(String itemCode) async {
+    try {
+      final url = Uri.parse(
+        '${config.baseUrl}/api/resource/Bin?'
+        'filters=[["item_code","=","$itemCode"],["warehouse","=","${config.warehouse}"]]'
+        '&fields=["actual_qty"]',
+      );
+
+      final res = await _client.get(url, headers: _headers).timeout(_timeout);
+
+      if (res.statusCode != 200) {
+        return 0;
+      }
+
+      final data = jsonDecode(res.body)['data'] as List? ?? [];
+      if (data.isEmpty) return 0;
+
+      return (data[0]['actual_qty'] ?? 0).toInt();
+    } catch (_) {
+      return 0; // Default to 0 if stock check fails
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ══════════════════════════════════════════════════════════════

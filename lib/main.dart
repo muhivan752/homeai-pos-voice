@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +9,8 @@ import 'application/pos_voice_service.dart';
 import 'domain/domain.dart';
 import 'infrastructure/auth/auth_context.dart';
 import 'infrastructure/auth/role_gatekeeper.dart';
+import 'infrastructure/erp/erpnext_adapter.dart';
+import 'infrastructure/erp/erpnext_config.dart';
 import 'infrastructure/erp/mock_erpnext_adapter.dart';
 import 'infrastructure/events/events.dart';
 import 'infrastructure/intent_parser.dart';
@@ -61,11 +66,39 @@ class _PosEntryPointState extends State<PosEntryPoint> {
 
   void _initializeDependencies() {
     // Create shared dependencies
-    // In production, switch to ERPNextAdapter based on config
-    _erpAdapter = MockERPNextAdapter();
+    // Check USE_MOCK environment variable
+    final useMock = _shouldUseMock();
+
+    if (useMock) {
+      print('[POS] Using MockERPNextAdapter');
+      _erpAdapter = MockERPNextAdapter();
+    } else {
+      print('[POS] Connecting to ERPNext...');
+      try {
+        final config = ERPNextConfig.fromEnv();
+        _erpAdapter = ERPNextAdapter(config);
+        print('[POS] ERPNext configured: ${config.baseUrl}');
+      } catch (e) {
+        print('[POS] ERPNext config failed: $e');
+        print('[POS] Falling back to MockERPNextAdapter');
+        _erpAdapter = MockERPNextAdapter();
+      }
+    }
+
     _logger = EventLogger(debugMode: true);
     _parser = IntentParser();
     _gatekeeper = RoleGatekeeper();
+  }
+
+  /// Check if we should use mock adapter
+  bool _shouldUseMock() {
+    // On web, can't use Platform.environment - default to mock unless configured
+    if (kIsWeb) {
+      return true; // Web always uses mock for now
+    }
+
+    final useMock = Platform.environment['USE_MOCK']?.toLowerCase();
+    return useMock != 'false'; // Default to mock unless explicitly set to false
   }
 
   void _onRoleSelected(AuthContext auth) {
