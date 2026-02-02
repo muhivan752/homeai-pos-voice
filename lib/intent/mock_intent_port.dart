@@ -1,5 +1,5 @@
-import '../intent/intent_port.dart';
-import '../intent/intent_payload.dart';
+import 'intent_port.dart';
+import 'intent_payload.dart';
 
 class MockIntentPort implements IntentPort {
   @override

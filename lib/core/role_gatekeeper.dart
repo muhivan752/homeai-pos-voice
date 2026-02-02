@@ -1,12 +1,18 @@
+import '../intent/intent.dart';
+import '../intent/intent_type.dart';
+import 'auth_context.dart';
+
 bool allowIntent(UserRole role, Intent intent) {
-  if (role == UserRole.barista) {
-    return intent is AddItemIntent || intent is CheckoutIntent;
+  switch (role) {
+    case UserRole.barista:
+      // Barista dapat menjual item dan checkout
+      return intent.type == IntentType.sellItem ||
+          intent.type == IntentType.checkout;
+    case UserRole.spv:
+      // Supervisor memiliki akses penuh
+      return true;
+    case UserRole.owner:
+      // Owner memiliki akses penuh
+      return true;
   }
-  if (role == UserRole.spv) {
-    return intent is StockIntent || intent is ClosingIntent;
-  }
-  if (role == UserRole.owner) {
-    return intent is ReadOnlyIntent;
-  }
-  return false;
 }
