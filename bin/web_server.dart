@@ -77,6 +77,20 @@ Future<void> _handleRequest(HttpRequest request, String webRoot) async {
     // Add CORS headers for development
     request.response.headers.add('Access-Control-Allow-Origin', '*');
 
+    // Add cache control headers
+    // index.html and service worker should not be cached aggressively
+    if (path.endsWith('.html') || path.contains('service_worker') || path.contains('flutter.js')) {
+      request.response.headers.add('Cache-Control', 'no-cache, no-store, must-revalidate');
+      request.response.headers.add('Pragma', 'no-cache');
+      request.response.headers.add('Expires', '0');
+    } else if (path.endsWith('.js') || path.endsWith('.wasm')) {
+      // JS and WASM files can be cached but with revalidation
+      request.response.headers.add('Cache-Control', 'public, max-age=3600, must-revalidate');
+    } else {
+      // Other assets can be cached longer
+      request.response.headers.add('Cache-Control', 'public, max-age=86400');
+    }
+
     // Serve file
     await request.response.addStream(file.openRead());
   } else {
@@ -126,6 +140,10 @@ ContentType _getContentType(String path) {
       return ContentType('font', 'ttf');
     case 'otf':
       return ContentType('font', 'otf');
+    case 'wasm':
+      return ContentType('application', 'wasm');
+    case 'map':
+      return ContentType('application', 'json');
     default:
       return ContentType.binary;
   }

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="HomeAI POS - Voice-enabled Point of Sale">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,6 +24,7 @@
       margin: 0;
       padding: 0;
       background-color: #1a1a2e;
+      overflow: hidden;
     }
     .loading-container {
       position: fixed;
@@ -36,27 +37,52 @@
       justify-content: center;
       align-items: center;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      z-index: 9999;
     }
     .loading-logo {
-      font-size: 48px;
+      font-size: 36px;
       font-weight: bold;
       color: #e94560;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     .loading-text {
       color: #ffffff;
-      font-size: 18px;
-      margin-bottom: 30px;
+      font-size: 16px;
+      margin-bottom: 24px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     .spinner {
-      width: 50px;
-      height: 50px;
-      border: 4px solid rgba(233, 69, 96, 0.3);
-      border-top: 4px solid #e94560;
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(233, 69, 96, 0.3);
+      border-top: 3px solid #e94560;
       border-radius: 50%;
       animation: spin 1s linear infinite;
+    }
+    .error-text {
+      color: #ff6b6b;
+      font-size: 14px;
+      margin-top: 20px;
+      text-align: center;
+      padding: 0 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: none;
+    }
+    .retry-btn {
+      margin-top: 16px;
+      padding: 12px 24px;
+      background-color: #e94560;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      display: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .retry-btn:active {
+      background-color: #d13a52;
     }
     @keyframes spin {
       0% { transform: rotate(0deg); }
@@ -75,12 +101,37 @@
   <!-- Loading indicator shown while Flutter loads -->
   <div id="loading" class="loading-container">
     <div class="loading-logo">HomeAI POS</div>
-    <div class="loading-text">Memuat aplikasi...</div>
-    <div class="spinner"></div>
+    <div class="loading-text" id="loading-status">Memuat aplikasi...</div>
+    <div class="spinner" id="spinner"></div>
+    <div class="error-text" id="error-text"></div>
+    <button class="retry-btn" id="retry-btn" onclick="location.reload()">Coba Lagi</button>
   </div>
 
   <script>
-    // Hide loading screen when Flutter is ready
+    // Update loading status
+    function updateStatus(text) {
+      var el = document.getElementById('loading-status');
+      if (el) el.textContent = text;
+    }
+
+    // Show error message
+    function showError(text) {
+      var el = document.getElementById('error-text');
+      var spinner = document.getElementById('spinner');
+      var retryBtn = document.getElementById('retry-btn');
+      if (el) {
+        el.textContent = text;
+        el.style.display = 'block';
+      }
+      if (spinner) {
+        spinner.style.display = 'none';
+      }
+      if (retryBtn) {
+        retryBtn.style.display = 'block';
+      }
+    }
+
+    // Hide loading screen
     function hideLoading() {
       var loading = document.getElementById('loading');
       if (loading) {
@@ -88,50 +139,68 @@
       }
     }
 
-    // Show error message
-    function showError(message) {
-      var loadingText = document.querySelector('.loading-text');
-      var spinner = document.querySelector('.spinner');
-      if (loadingText) {
-        loadingText.textContent = message;
-        loadingText.style.color = '#ff6b6b';
-      }
-      if (spinner) {
-        spinner.style.display = 'none';
-      }
-    }
-
-    // Set timeout for loading
-    var loadTimeout = setTimeout(function() {
-      showError('Gagal memuat aplikasi. Coba refresh halaman.');
-    }, 30000); // 30 second timeout
-
     window.addEventListener('load', function(ev) {
-      // Download main.dart.js
-      _flutter.loader.loadEntrypoint({
-        serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion,
-        },
-        onEntrypointLoaded: function(engineInitializer) {
-          engineInitializer.initializeEngine().then(function(appRunner) {
-            clearTimeout(loadTimeout);
-            appRunner.runApp();
-            // Hide loading after a short delay to ensure Flutter has rendered
-            setTimeout(hideLoading, 100);
-          }).catch(function(error) {
-            clearTimeout(loadTimeout);
-            console.error('Failed to initialize engine:', error);
-            showError('Gagal memuat aplikasi: ' + error.message);
-          });
-        }
-      });
+      updateStatus('Menginisialisasi Flutter...');
+
+      // Set timeout for loading - 30 seconds
+      var loadTimeout = setTimeout(function() {
+        showError('Loading terlalu lama. Coba refresh halaman atau clear cache browser.');
+      }, 30000);
+
+      // Check if Flutter loader is available
+      if (typeof _flutter === 'undefined' || !_flutter.loader) {
+        clearTimeout(loadTimeout);
+        console.error('Flutter loader not available');
+        showError('Flutter gagal dimuat. Coba clear cache browser dan refresh.');
+        return;
+      }
+
+      // Disable service worker on HTTP (only works on HTTPS)
+      var useServiceWorker = window.location.protocol === 'https:';
+
+      try {
+        _flutter.loader.loadEntrypoint({
+          serviceWorker: useServiceWorker ? {
+            serviceWorkerVersion: serviceWorkerVersion,
+          } : null,
+          onEntrypointLoaded: function(engineInitializer) {
+            updateStatus('Memulai engine...');
+
+            // Use HTML renderer for better mobile compatibility
+            engineInitializer.initializeEngine({
+              renderer: 'html'
+            }).then(function(appRunner) {
+              clearTimeout(loadTimeout);
+              updateStatus('Menjalankan aplikasi...');
+              appRunner.runApp();
+
+              // Hide loading after app starts rendering
+              setTimeout(hideLoading, 500);
+            }).catch(function(e) {
+              clearTimeout(loadTimeout);
+              console.error('Engine init error:', e);
+              showError('Gagal memulai engine: ' + (e.message || e));
+            });
+          }
+        });
+      } catch (e) {
+        clearTimeout(loadTimeout);
+        console.error('Flutter load error:', e);
+        showError('Gagal memuat Flutter: ' + (e.message || e));
+      }
     });
 
     // Global error handler
-    window.onerror = function(message, source, lineno, colno, error) {
-      console.error('Error:', message);
-      showError('Terjadi error: ' + message);
-      return true;
+    window.onerror = function(msg, url, line, col, error) {
+      console.error('Global error:', msg, url, line);
+      showError('Error: ' + msg);
+      return false;
+    };
+
+    // Unhandled promise rejection handler
+    window.onunhandledrejection = function(event) {
+      console.error('Unhandled rejection:', event.reason);
+      showError('Error: ' + (event.reason?.message || event.reason));
     };
   </script>
 </body>
