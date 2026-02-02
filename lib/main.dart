@@ -92,9 +92,10 @@ class _PosEntryPointState extends State<PosEntryPoint> {
 
   /// Check if we should use mock adapter
   bool _shouldUseMock() {
-    // On web, can't use Platform.environment - default to mock unless configured
+    // On web, check if compile-time config is available
     if (kIsWeb) {
-      return true; // Web always uses mock for now
+      // Use real ERPNext if config is available via --dart-define
+      return !ERPNextConfig.hasWebConfig;
     }
 
     final useMock = Platform.environment['USE_MOCK']?.toLowerCase();
