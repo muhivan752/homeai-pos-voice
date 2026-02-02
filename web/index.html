@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="HomeAI POS - Voice-enabled Point of Sale">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,6 +19,51 @@
   <title>HomeAI POS</title>
   <link rel="manifest" href="manifest.json">
 
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #1a1a2e;
+    }
+    .loading-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    }
+    .loading-logo {
+      font-size: 48px;
+      font-weight: bold;
+      color: #e94560;
+      margin-bottom: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .loading-text {
+      color: #ffffff;
+      font-size: 18px;
+      margin-bottom: 30px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(233, 69, 96, 0.3);
+      border-top: 4px solid #e94560;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
   <script>
     // The value below is injected by flutter build, do not touch.
     const serviceWorkerVersion = null;
@@ -26,6 +72,13 @@
   <script src="flutter.js" defer></script>
 </head>
 <body>
+  <!-- Loading indicator shown while Flutter loads -->
+  <div id="loading" class="loading-container">
+    <div class="loading-logo">HomeAI POS</div>
+    <div class="loading-text">Memuat aplikasi...</div>
+    <div class="spinner"></div>
+  </div>
+
   <script>
     window.addEventListener('load', function(ev) {
       // Download main.dart.js
