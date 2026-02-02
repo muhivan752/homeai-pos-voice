@@ -1,0 +1,62 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'claude/*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK (Release)
+        run: flutter build apk --release
+
+      - name: Build APK (Debug)
+        run: flutter build apk --debug
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+      - name: Upload APK info
+        run: |
+          echo "## Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "- Release APK: build/app/outputs/flutter-apk/app-release.apk" >> $GITHUB_STEP_SUMMARY
+          echo "- Debug APK: build/app/outputs/flutter-apk/app-debug.apk" >> $GITHUB_STEP_SUMMARY
+          ls -lh build/app/outputs/flutter-apk/*.apk >> $GITHUB_STEP_SUMMARY
