@@ -14,3 +14,16 @@ pubspec.lock
 
 # Build
 build/
+
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+*.jks
+*.keystore
+
+# Generated files
+*.g.dart
+*.freezed.dart
