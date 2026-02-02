@@ -51,6 +51,57 @@ Future<void> handleRequest(
 
   final path = request.uri.path;
 
+  // Root - Welcome page
+  if ((path == '/' || path.isEmpty) && request.method == 'GET') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.html
+      ..write('''
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HomeAI POS Voice</title>
+  <style>
+    body { font-family: system-ui; max-width: 600px; margin: 50px auto; padding: 20px; }
+    h1 { color: #333; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 8px; overflow-x: auto; }
+    .endpoint { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+    .method { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    .get { background: #61affe; color: white; }
+    .post { background: #49cc90; color: white; }
+  </style>
+</head>
+<body>
+  <h1>🎤 HomeAI POS Voice API</h1>
+  <p>Voice command server untuk Point of Sale</p>
+
+  <div class="endpoint">
+    <span class="method get">GET</span> <code>/health</code>
+    <p>Health check endpoint</p>
+  </div>
+
+  <div class="endpoint">
+    <span class="method post">POST</span> <code>/voice</code>
+    <p>Kirim perintah voice</p>
+    <pre>{
+  "text": "jual kopi susu 2"
+}</pre>
+  </div>
+
+  <h3>Contoh perintah:</h3>
+  <ul>
+    <li><code>jual kopi susu 2</code> - Jual 2 kopi susu</li>
+    <li><code>jual es teh manis 3</code> - Jual 3 es teh manis</li>
+    <li><code>bayar</code> atau <code>checkout</code> - Proses pembayaran</li>
+  </ul>
+</body>
+</html>
+''')
+      ..close();
+    return;
+  }
+
   // Health check
   if (path == '/health' && request.method == 'GET') {
     request.response
