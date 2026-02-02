@@ -237,6 +237,36 @@ class MockERPNextAdapter implements ERPPort {
         .toList();
   }
 
+  @override
+  Future<List<Product>> getCatalog() async {
+    return _catalog.entries.map((entry) {
+      final itemKey = entry.key;
+      return Product(
+        name: _toDisplayName(itemKey),
+        code: _toItemCode(itemKey),
+        price: entry.value,
+        stock: _stock[itemKey] ?? 0,
+        category: _getCategory(itemKey),
+      );
+    }).toList();
+  }
+
+  String _toDisplayName(String item) {
+    return item.split(' ').map((word) =>
+      word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}'
+    ).join(' ');
+  }
+
+  String _getCategory(String item) {
+    if (item.contains('kopi') || item.contains('americano') ||
+        item.contains('cappuccino') || item.contains('latte')) {
+      return 'Kopi';
+    } else if (item.contains('teh')) {
+      return 'Teh';
+    }
+    return 'Lainnya';
+  }
+
   // === HELPERS ===
 
   String _toItemCode(String item) {

@@ -4,11 +4,12 @@ import '../../domain/domain.dart';
 import '../theme/pos_theme.dart';
 import '../widgets/widgets.dart';
 
-/// Customer mode screen - read-only cart view.
+/// Customer mode screen - read-only cart view with product catalog.
 ///
 /// Principle: Customer = speed
 /// - Clear, large display of cart items
 /// - Total prominently shown
+/// - Product catalog visible for reference
 /// - Auto-refresh when cart changes
 /// - Voice command limited to inquiry only
 class CustomerScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class CustomerScreen extends StatefulWidget {
 
 class _CustomerScreenState extends State<CustomerScreen> {
   List<CartItem> _cartItems = [];
+  List<Product> _products = [];
   CartTotal? _cartTotal;
   bool _isLoading = true;
   String? _errorMessage;
@@ -41,26 +43,23 @@ class _CustomerScreenState extends State<CustomerScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCart();
+    _loadData();
   }
 
-  Future<void> _loadCart() async {
+  Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      // Get cart from service
-      final cartResult = await widget.service.handleVoice('isi keranjang');
-      final totalResult = await widget.service.handleVoice('totalnya berapa');
-
-      // Parse the results (in real app, service would return structured data)
-      // For now, we'll call the ERP adapter directly through the service
-      await _refreshCartData();
+      await Future.wait([
+        _loadProducts(),
+        _loadCart(),
+      ]);
     } catch (e) {
       setState(() {
-        _errorMessage = 'Gagal memuat keranjang';
+        _errorMessage = 'Gagal memuat data';
       });
     } finally {
       setState(() {
@@ -69,16 +68,30 @@ class _CustomerScreenState extends State<CustomerScreen> {
     }
   }
 
-  Future<void> _refreshCartData() async {
-    // Using voice commands to get cart data
-    final cartResult = await widget.service.handleVoice('isi keranjang');
-    final totalResult = await widget.service.handleVoice('total');
+  Future<void> _loadProducts() async {
+    try {
+      final products = await widget.service.getCatalog();
+      if (mounted) {
+        setState(() => _products = products);
+      }
+    } catch (e) {
+      print('[CustomerScreen] Error loading products: $e');
+    }
+  }
 
-    setState(() {
-      // The service returns VoiceResult with message
-      // In real implementation, we'd have direct access to cart data
-      _feedbackMessage = cartResult.message;
-    });
+  Future<void> _loadCart() async {
+    try {
+      final cartItems = await widget.service.getCartItems();
+      final cartTotal = await widget.service.getCartTotal();
+      if (mounted) {
+        setState(() {
+          _cartItems = cartItems;
+          _cartTotal = cartTotal;
+        });
+      }
+    } catch (e) {
+      print('[CustomerScreen] Error loading cart: $e');
+    }
   }
 
   Future<void> _handleVoiceCommand(String command) async {
@@ -111,45 +124,103 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
     // Refresh cart if inquiry command
     if (result.isSuccess) {
-      await _refreshCartData();
+      await _loadCart();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 900;
+
     return Scaffold(
-      backgroundColor: PosTheme.customerAccent.withValues(alpha: 0.05),
+      backgroundColor: PosTheme.customerAccent.withValues(alpha: 0.03),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-
-            // Main content
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildContent(),
-            ),
-
-            // Voice feedback
-            if (_recognizedText != null || _feedbackMessage != null)
-              Padding(
-                padding: const EdgeInsets.all(PosTheme.paddingMedium),
-                child: VoiceFeedback(
-                  recognizedText: _recognizedText,
-                  message: _feedbackMessage,
-                  isListening: _isListening,
-                  isSuccess: _isSuccess,
-                  isError: _isError,
-                ),
-              ),
-
-            // Bottom actions
-            _buildBottomActions(),
-          ],
-        ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : isWideScreen
+                ? _buildWideLayout()
+                : _buildCompactLayout(),
       ),
+    );
+  }
+
+  /// Wide layout: 2 columns (Products | Cart)
+  Widget _buildWideLayout() {
+    return Column(
+      children: [
+        // Header
+        _buildHeader(),
+
+        // Content
+        Expanded(
+          child: Row(
+            children: [
+              // Left - Product catalog (reference)
+              Expanded(
+                flex: 3,
+                child: _buildProductPanel(),
+              ),
+              const VerticalDivider(width: 1),
+
+              // Right - Cart and total
+              Expanded(
+                flex: 2,
+                child: _buildCartPanel(),
+              ),
+            ],
+          ),
+        ),
+
+        // Voice feedback
+        if (_recognizedText != null || _feedbackMessage != null)
+          Padding(
+            padding: const EdgeInsets.all(PosTheme.paddingMedium),
+            child: VoiceFeedback(
+              recognizedText: _recognizedText,
+              message: _feedbackMessage,
+              isListening: _isListening,
+              isSuccess: _isSuccess,
+              isError: _isError,
+            ),
+          ),
+
+        // Bottom actions
+        _buildBottomActions(),
+      ],
+    );
+  }
+
+  /// Compact layout: Single column
+  Widget _buildCompactLayout() {
+    return Column(
+      children: [
+        // Header
+        _buildHeader(),
+
+        // Product quick list
+        _buildProductQuickList(),
+        const Divider(height: 1),
+
+        // Main content
+        Expanded(child: _buildContent()),
+
+        // Voice feedback
+        if (_recognizedText != null || _feedbackMessage != null)
+          Padding(
+            padding: const EdgeInsets.all(PosTheme.paddingMedium),
+            child: VoiceFeedback(
+              recognizedText: _recognizedText,
+              message: _feedbackMessage,
+              isListening: _isListening,
+              isSuccess: _isSuccess,
+              isError: _isError,
+            ),
+          ),
+
+        // Bottom actions
+        _buildBottomActions(),
+      ],
     );
   }
 
@@ -192,12 +263,116 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
           // Refresh button
           IconButton(
-            onPressed: _loadCart,
+            onPressed: _loadData,
             icon: const Icon(Icons.refresh),
             color: PosTheme.textSecondary,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProductPanel() {
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(PosTheme.paddingMedium),
+          decoration: const BoxDecoration(
+            color: PosTheme.surface,
+            border: Border(bottom: BorderSide(color: PosTheme.divider)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.restaurant_menu, color: PosTheme.customerAccent),
+              const SizedBox(width: PosTheme.paddingSmall),
+              Text(
+                'Menu Tersedia',
+                style: PosTheme.headlineMedium.copyWith(
+                  color: PosTheme.customerAccent,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_products.length} produk',
+                style: PosTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+
+        // Product catalog (read-only, no onTap action)
+        Expanded(
+          child: ProductCatalog(
+            products: _products,
+            onProductTap: (_) {}, // No action for customer
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductQuickList() {
+    return Container(
+      color: PosTheme.surface,
+      child: ProductQuickList(
+        products: _products,
+        onProductTap: (_) {}, // No action for customer
+        title: 'Menu Tersedia',
+      ),
+    );
+  }
+
+  Widget _buildCartPanel() {
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(PosTheme.paddingMedium),
+          decoration: const BoxDecoration(
+            color: PosTheme.surface,
+            border: Border(bottom: BorderSide(color: PosTheme.divider)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.shopping_cart, color: PosTheme.customerAccent),
+              const SizedBox(width: PosTheme.paddingSmall),
+              Text(
+                'Keranjang',
+                style: PosTheme.headlineMedium.copyWith(
+                  color: PosTheme.customerAccent,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_cartItems.length} item',
+                style: PosTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+
+        // Cart items
+        Expanded(
+          child: _cartItems.isEmpty
+              ? _buildEmptyCart()
+              : ListView.separated(
+                  padding: const EdgeInsets.all(PosTheme.paddingMedium),
+                  itemCount: _cartItems.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: PosTheme.paddingSmall),
+                  itemBuilder: (context, index) {
+                    return CartItemTile(
+                      item: _cartItems[index],
+                      showActions: false, // Read-only for customer
+                    );
+                  },
+                ),
+        ),
+
+        // Total display
+        if (_cartTotal != null) _buildTotalCard(),
+      ],
     );
   }
 
@@ -219,7 +394,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
             ),
             const SizedBox(height: PosTheme.paddingMedium),
             ElevatedButton(
-              onPressed: _loadCart,
+              onPressed: _loadData,
               child: const Text('Coba Lagi'),
             ),
           ],

@@ -12,6 +12,7 @@ import '../widgets/widgets.dart';
 /// - Voice + text input
 /// - Clear confirmations
 /// - Role-based feature visibility
+/// - Product catalog visible for easy selection
 class StaffScreen extends StatefulWidget {
   final PosVoiceService service;
   final AuthContext auth;
@@ -30,8 +31,9 @@ class StaffScreen extends StatefulWidget {
 
 class _StaffScreenState extends State<StaffScreen> {
   List<CartItem> _cartItems = [];
+  List<Product> _products = [];
   CartTotal? _cartTotal;
-  bool _isLoading = false;
+  bool _isLoading = true;
 
   // Voice state
   VoiceButtonState _voiceState = VoiceButtonState.idle;
@@ -43,20 +45,45 @@ class _StaffScreenState extends State<StaffScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCart();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    await Future.wait([
+      _loadProducts(),
+      _loadCart(),
+    ]);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadProducts() async {
+    try {
+      final products = await widget.service.getCatalog();
+      if (mounted) {
+        setState(() => _products = products);
+      }
+    } catch (e) {
+      print('[StaffScreen] Error loading products: $e');
+    }
   }
 
   Future<void> _loadCart() async {
-    // Silent refresh - don't show loading for quick refreshes
     await _refreshCartData();
   }
 
   Future<void> _refreshCartData() async {
-    // Get cart data through service
-    // In real implementation, service would expose cart state directly
-    final result = await widget.service.handleVoice('isi keranjang');
-    if (result.isSuccess) {
-      // Parse cart from message (demo - real app would have structured data)
+    try {
+      final cartItems = await widget.service.getCartItems();
+      final cartTotal = await widget.service.getCartTotal();
+      if (mounted) {
+        setState(() {
+          _cartItems = cartItems;
+          _cartTotal = cartTotal;
+        });
+      }
+    } catch (e) {
+      print('[StaffScreen] Error loading cart: $e');
     }
   }
 
@@ -101,8 +128,15 @@ class _StaffScreenState extends State<StaffScreen> {
       }
     });
 
-    // Refresh cart data
-    await _refreshCartData();
+    // Refresh cart and products data
+    await Future.wait([
+      _refreshCartData(),
+      _loadProducts(),
+    ]);
+  }
+
+  Future<void> _addProduct(Product product) async {
+    await _handleCommand('jual ${product.name}');
   }
 
   void _startListening() {
@@ -123,26 +157,144 @@ class _StaffScreenState extends State<StaffScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 900;
+    final isMediumScreen = screenWidth > 600;
+
     return Scaffold(
       body: SafeArea(
-        child: Row(
-          children: [
-            // Left panel - Cart
-            Expanded(
-              flex: 3,
-              child: _buildCartPanel(),
-            ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : isWideScreen
+                ? _buildWideLayout()
+                : isMediumScreen
+                    ? _buildMediumLayout()
+                    : _buildCompactLayout(),
+      ),
+    );
+  }
 
-            // Divider
-            const VerticalDivider(width: 1),
-
-            // Right panel - Input & Actions
-            Expanded(
-              flex: 2,
-              child: _buildInputPanel(),
-            ),
-          ],
+  /// Wide layout: 3 columns (Products | Cart | Actions)
+  Widget _buildWideLayout() {
+    return Row(
+      children: [
+        // Left panel - Products
+        Expanded(
+          flex: 3,
+          child: _buildProductPanel(),
         ),
+        const VerticalDivider(width: 1),
+
+        // Center panel - Cart
+        Expanded(
+          flex: 2,
+          child: _buildCartPanel(),
+        ),
+        const VerticalDivider(width: 1),
+
+        // Right panel - Actions
+        Expanded(
+          flex: 2,
+          child: _buildInputPanel(),
+        ),
+      ],
+    );
+  }
+
+  /// Medium layout: 2 columns (Products+Cart | Actions)
+  Widget _buildMediumLayout() {
+    return Row(
+      children: [
+        // Left side - Products and Cart
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              // Products (scrollable horizontal list)
+              _buildProductQuickList(),
+              const Divider(height: 1),
+
+              // Cart
+              Expanded(child: _buildCartPanel()),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1),
+
+        // Right side - Actions
+        Expanded(
+          flex: 2,
+          child: _buildInputPanel(),
+        ),
+      ],
+    );
+  }
+
+  /// Compact layout: Single column with tabs or scrolling
+  Widget _buildCompactLayout() {
+    return Column(
+      children: [
+        // User header
+        _buildUserHeader(),
+
+        // Product quick list
+        _buildProductQuickList(),
+        const Divider(height: 1),
+
+        // Cart list
+        Expanded(child: _buildCartList()),
+
+        // Total
+        _buildTotalSection(),
+
+        // Quick actions + Input
+        _buildCompactInputArea(),
+      ],
+    );
+  }
+
+  Widget _buildProductPanel() {
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(PosTheme.paddingMedium),
+          decoration: const BoxDecoration(
+            color: PosTheme.surface,
+            border: Border(bottom: BorderSide(color: PosTheme.divider)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.restaurant_menu, color: PosTheme.primary),
+              const SizedBox(width: PosTheme.paddingSmall),
+              Text('Menu', style: PosTheme.headlineMedium),
+              const Spacer(),
+              Text(
+                '${_products.length} produk',
+                style: PosTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+
+        // Product catalog
+        Expanded(
+          child: ProductCatalog(
+            products: _products,
+            onProductTap: _addProduct,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductQuickList() {
+    return Container(
+      color: PosTheme.surface,
+      child: ProductQuickList(
+        products: _products,
+        onProductTap: _addProduct,
+        title: 'Menu',
       ),
     );
   }
@@ -154,11 +306,7 @@ class _StaffScreenState extends State<StaffScreen> {
         _buildCartHeader(),
 
         // Cart items
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildCartList(),
-        ),
+        Expanded(child: _buildCartList()),
 
         // Total section
         _buildTotalSection(),
@@ -206,7 +354,7 @@ class _StaffScreenState extends State<StaffScreen> {
             ),
             const SizedBox(height: PosTheme.paddingSmall),
             Text(
-              'Ucapkan "jual kopi" untuk menambah',
+              'Tap produk di menu untuk menambah',
               style: PosTheme.bodyMedium,
             ),
           ],
@@ -254,56 +402,32 @@ class _StaffScreenState extends State<StaffScreen> {
   }
 
   Widget _buildTotalSection() {
+    final total = _cartTotal?.grandTotal ?? 0;
+    final itemCount = _cartItems.length;
+
     return Container(
       padding: const EdgeInsets.all(PosTheme.paddingMedium),
       decoration: const BoxDecoration(
         color: PosTheme.surface,
         border: Border(top: BorderSide(color: PosTheme.divider)),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Subtotal row
-          if (_cartTotal != null) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Subtotal', style: PosTheme.bodyLarge),
-                Text(
-                  formatRupiah(_cartTotal!.total),
-                  style: PosTheme.bodyLarge,
-                ),
-              ],
-            ),
-            if (_cartTotal!.discount > 0) ...[
-              const SizedBox(height: PosTheme.paddingSmall),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Diskon',
-                    style: PosTheme.bodyMedium.copyWith(color: PosTheme.success),
-                  ),
-                  Text(
-                    '- ${formatRupiah(_cartTotal!.discount)}',
-                    style:
-                        PosTheme.bodyMedium.copyWith(color: PosTheme.success),
-                  ),
-                ],
-              ),
-            ],
-            const Divider(),
-          ],
-
-          // Grand total
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Total', style: PosTheme.headlineMedium),
-              Text(
-                formatRupiah(_cartTotal?.grandTotal ?? 0),
-                style: PosTheme.totalPrice,
-              ),
+              if (itemCount > 0)
+                Text(
+                  '$itemCount item',
+                  style: PosTheme.bodyMedium,
+                ),
             ],
+          ),
+          Text(
+            formatRupiah(total),
+            style: PosTheme.totalPrice,
           ),
         ],
       ),
@@ -468,6 +592,49 @@ class _StaffScreenState extends State<StaffScreen> {
                 padding: EdgeInsets.all(PosTheme.paddingSmall),
                 child: Text('Bayar'),
               ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: PosTheme.success,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(PosTheme.paddingSmall),
+      decoration: const BoxDecoration(
+        color: PosTheme.surface,
+        border: Border(top: BorderSide(color: PosTheme.divider)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Quick actions
+          QuickActions(
+            onAction: _handleCommand,
+            isCustomer: false,
+          ),
+          const SizedBox(height: PosTheme.paddingSmall),
+
+          // Text input
+          CommandInput(
+            onSubmit: _handleCommand,
+            hintText: 'Ketik perintah, misal: "jual kopi 2"',
+          ),
+          const SizedBox(height: PosTheme.paddingSmall),
+
+          // Checkout button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _cartItems.isNotEmpty
+                  ? () => _handleCommand('bayar')
+                  : null,
+              icon: const Icon(Icons.payment),
+              label: const Text('Bayar'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: PosTheme.success,
               ),

@@ -1,6 +1,37 @@
 /// Domain entities untuk Cart.
 /// Value objects yang merepresentasikan data di cart.
 
+/// Product dalam katalog.
+class Product {
+  final String name;
+  final String code;
+  final double price;
+  final int stock;
+  final String? category;
+  final String? imageUrl;
+
+  Product({
+    required this.name,
+    required this.code,
+    required this.price,
+    required this.stock,
+    this.category,
+    this.imageUrl,
+  });
+
+  bool get isAvailable => stock > 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is Product && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
+
+  @override
+  String toString() => 'Product($name, Rp$price, stock: $stock)';
+}
+
 /// Item dalam cart dengan detail harga dan qty.
 class CartItem {
   final String item;

@@ -76,6 +76,7 @@ class _PosEntryPointState extends State<PosEntryPoint> {
       executor: executor,
       gatekeeper: _gatekeeper,
       auth: auth,
+      erp: _erpAdapter,
     );
 
     final speech = SpeechService();
@@ -154,6 +155,7 @@ class _PosEntryPointState extends State<PosEntryPoint> {
       executor: IntentExecutor(_erpAdapter),
       gatekeeper: _gatekeeper,
       auth: auth,
+      erp: _erpAdapter,
     );
   }
 }

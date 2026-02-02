@@ -14,16 +14,19 @@ class PosVoiceService {
   final IntentExecutor _executor;
   final RoleGatekeeper _gatekeeper;
   final AuthContext _auth;
+  final ERPPort _erp;
 
   PosVoiceService({
     required IntentParser parser,
     required IntentExecutor executor,
     required RoleGatekeeper gatekeeper,
     required AuthContext auth,
+    required ERPPort erp,
   })  : _parser = parser,
         _executor = executor,
         _gatekeeper = gatekeeper,
-        _auth = auth;
+        _auth = auth,
+        _erp = erp;
 
   /// Handle voice command dari UI.
   /// Returns VoiceResult untuk voice feedback.
@@ -62,6 +65,23 @@ class PosVoiceService {
 
     // Business errors - sudah dalam bahasa Indonesia dari adapter
     return error;
+  }
+
+  // === DIRECT DATA ACCESS (for UI) ===
+
+  /// Get product catalog for display.
+  Future<List<Product>> getCatalog() async {
+    return await _erp.getCatalog();
+  }
+
+  /// Get cart items for display.
+  Future<List<CartItem>> getCartItems() async {
+    return await _erp.readCart();
+  }
+
+  /// Get cart total for display.
+  Future<CartTotal> getCartTotal() async {
+    return await _erp.readTotal();
   }
 }
 

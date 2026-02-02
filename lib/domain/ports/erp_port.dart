@@ -36,4 +36,7 @@ abstract class ERPPort {
 
   /// Baca isi cart
   Future<List<CartItem>> readCart();
+
+  /// Baca katalog produk
+  Future<List<Product>> getCatalog();
 }
