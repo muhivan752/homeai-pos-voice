@@ -19,8 +19,8 @@ Type=simple
 User=ivan_botak
 WorkingDirectory=/opt/homeai-pos-voice
 Environment="PATH=/opt/flutter/bin:/opt/dart-sdk/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="PORT=8080"
-ExecStart=/opt/dart-sdk/bin/dart run bin/web_server.dart 8080
+EnvironmentFile=/opt/homeai-pos-voice/.env
+ExecStart=/opt/dart-sdk/bin/dart run bin/web_server.dart 8088
 Restart=always
 RestartSec=5
 StandardOutput=journal
