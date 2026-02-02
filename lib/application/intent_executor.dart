@@ -1,12 +1,9 @@
-import '../intent/intent.dart';
-import '../intent/intent_type.dart';
-import '../intent/intent_payload.dart';
-import '../intent/intent_port.dart';
+import '../domain/domain.dart';
 
 /// Phase 1: Core Voice Commerce Executor
-/// Route Intent ke IntentPort operations.
+/// Route Intent ke ERPPort operations.
 class IntentExecutor {
-  final IntentPort port;
+  final ERPPort port;
 
   IntentExecutor(this.port);
 

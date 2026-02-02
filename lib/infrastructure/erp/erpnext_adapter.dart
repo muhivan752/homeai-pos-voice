@@ -3,20 +3,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
-import '../../intent/intent_port.dart';
-import '../../intent/intent_payload.dart';
+import '../../domain/domain.dart';
 import 'erpnext_config.dart';
 import 'item_lookup.dart';
 
 /// ERPNext adapter Phase 1: Core Voice Commerce
-/// Implements IntentPort untuk semua cart operations.
+/// Implements ERPPort untuk semua cart operations.
 ///
 /// ATURAN:
 /// 1. Semua operasi via POS Invoice draft
 /// 2. Undo scope HANYA untuk add/remove
 /// 3. changeQty dan clearCart = destructive (no undo)
 /// 4. checkout = submit invoice (docstatus 1)
-class ERPNextAdapter implements IntentPort {
+class ERPNextAdapter implements ERPPort {
   final ERPNextConfig config;
   final http.Client _client;
   final ItemLookup _itemLookup;

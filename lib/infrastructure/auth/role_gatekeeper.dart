@@ -1,5 +1,4 @@
-import '../../domain/intent/intent.dart';
-import '../../domain/intent/intent_type.dart';
+import '../../domain/domain.dart';
 import 'auth_context.dart';
 
 /// Role-based access control untuk intent.

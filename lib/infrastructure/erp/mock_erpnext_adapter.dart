@@ -1,5 +1,4 @@
-import '../../intent/intent_port.dart';
-import '../../intent/intent_payload.dart';
+import '../../domain/domain.dart';
 
 /// Phase 1: HARDENED Mock ERPNext adapter.
 /// Mensimulasikan kondisi real ERP:
@@ -7,7 +6,7 @@ import '../../intent/intent_payload.dart';
 /// - Stock constraints (bisa habis)
 /// - Undo scope terbatas (HANYA add/remove)
 /// - Permission errors
-class MockERPNextAdapter implements IntentPort {
+class MockERPNextAdapter implements ERPPort {
   /// Current cart items
   final List<_MockCartItem> _cart = [];
 

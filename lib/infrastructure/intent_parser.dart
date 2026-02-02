@@ -1,8 +1,6 @@
 import 'dart:math';
 
-import '../intent/intent.dart';
-import '../intent/intent_type.dart';
-import '../intent/intent_payload.dart';
+import '../domain/domain.dart';
 
 /// Phase 1: Core Voice Commerce Parser
 /// Translate natural language → Intent

@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'application/intent_executor.dart';
 import 'application/pos_voice_service.dart';
-import 'domain/ports/erp_port.dart';
+import 'domain/domain.dart';
 import 'infrastructure/auth/auth_context.dart';
 import 'infrastructure/auth/role_gatekeeper.dart';
 import 'infrastructure/erp/mock_erpnext_adapter.dart';

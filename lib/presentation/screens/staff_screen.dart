@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../application/pos_voice_service.dart';
-import '../../domain/entities/cart_item.dart';
-import '../../domain/entities/cart_total.dart';
+import '../../domain/domain.dart';
 import '../../infrastructure/auth/auth_context.dart';
 import '../theme/pos_theme.dart';
 import '../widgets/widgets.dart';

@@ -1,4 +1,4 @@
-import '../intent/intent_type.dart';
+import '../domain/domain.dart';
 import '../infrastructure/intent_parser.dart';
 import 'intent_executor.dart';
 import '../infrastructure/auth/auth_context.dart';

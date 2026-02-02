@@ -1,5 +1,4 @@
-import '../../domain/intent/intent.dart';
-import '../../domain/intent/intent_type.dart';
+import '../../domain/domain.dart';
 import '../auth/auth_context.dart';
 
 /// Event types for POS audit trail.
