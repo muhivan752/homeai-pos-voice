@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../lib/core/voice_command_coordinator.dart';
-import '../lib/core/auth_context.dart';
-import '../lib/intent/intent_parser.dart';
-import '../lib/intent/intent_executor.dart';
-import '../lib/intent/mock_intent_port.dart';
+import 'package:homeai_voice/core/voice_command_coordinator.dart';
+import 'package:homeai_voice/core/auth_context.dart';
+import 'package:homeai_voice/intent/intent_parser.dart';
+import 'package:homeai_voice/intent/intent_executor.dart';
+import 'package:homeai_voice/intent/mock_intent_port.dart';
 
 void main() async {
-  final port = int.tryParse(Platform.environment['PORT'] ?? '8080') ?? 8080;
+  // Default port 3000 untuk menghindari konflik dengan Frappe (8080)
+  final port = int.tryParse(Platform.environment['PORT'] ?? '3000') ?? 3000;
 
   final coordinator = VoiceCommandCoordinator(
     auth: AuthContext(UserRole.barista),
