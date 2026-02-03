@@ -1,15 +1,18 @@
-import 'core/voice_command_coordinator.dart';
-import 'core/auth_context.dart';
-import 'intent/intent_parser.dart';
-import 'intent/intent_executor.dart';
-import 'core/erp_client.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'app/pos_app.dart';
+import 'app/providers/cart_provider.dart';
+import 'app/providers/voice_provider.dart';
 
-void main() async {
-  final coordinator = VoiceCommandCoordinator(
-    auth: AuthContext(UserRole.barista),
-    parser: IntentParser(),
-    executor: IntentExecutor(ERPClient()),
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => VoiceProvider()),
+      ],
+      child: const PosApp(),
+    ),
   );
-
-  await coordinator.handleVoice("jual kopi susu 2");
 }

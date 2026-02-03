@@ -1,12 +1,21 @@
+import 'auth_context.dart';
+import '../intent/intent.dart';
+import '../intent/intent_type.dart';
+
 bool allowIntent(UserRole role, Intent intent) {
-  if (role == UserRole.barista) {
-    return intent is AddItemIntent || intent is CheckoutIntent;
+  switch (role) {
+    case UserRole.barista:
+      return intent.type == IntentType.sellItem ||
+          intent.type == IntentType.checkout;
+
+    case UserRole.supervisor:
+      return intent.type == IntentType.sellItem ||
+          intent.type == IntentType.checkout;
+
+    case UserRole.owner:
+      return intent.type == IntentType.checkout;
+
+    case UserRole.admin:
+      return true;
   }
-  if (role == UserRole.spv) {
-    return intent is StockIntent || intent is ClosingIntent;
-  }
-  if (role == UserRole.owner) {
-    return intent is ReadOnlyIntent;
-  }
-  return false;
 }

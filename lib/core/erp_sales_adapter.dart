@@ -1,12 +1,16 @@
-class ErpSalesAdapter {
-  void addItem({
-    required String item,
-    required int qty,
-  }) {
-    print('[ERP] add item: $item x $qty');
+import '../intent/intent_port.dart';
+import '../intent/intent_payload.dart';
+
+class ErpSalesAdapter implements IntentPort {
+  @override
+  Future<void> sellItem(SellItemPayload payload) async {
+    // In real implementation, this would call ERP API
+    print('[ERP] sell item: ${payload.item} x ${payload.qty}');
   }
 
-  void checkout() {
-    print('[ERP] checkout');
+  @override
+  Future<void> checkout() async {
+    // In real implementation, this would finalize the sale in ERP
+    print('[ERP] checkout completed');
   }
 }

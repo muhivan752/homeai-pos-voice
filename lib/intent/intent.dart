@@ -11,4 +11,6 @@ class Intent {
     required this.type,
     required this.payload,
   });
+
+  bool get isValid => type != IntentType.unknown;
 }

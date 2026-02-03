@@ -1,45 +1,60 @@
 import '../intent/intent_parser.dart';
 import '../intent/intent_executor.dart';
+import '../intent/intent.dart';
 import '../core/auth_context.dart';
 import '../core/role_gatekeeper.dart';
+
+typedef VoiceCallback = void Function(String message, bool isSuccess);
 
 class VoiceCommandCoordinator {
   final AuthContext auth;
   final IntentParser parser;
   final IntentExecutor executor;
+  final VoiceCallback? onResult;
 
   VoiceCommandCoordinator({
     required this.auth,
     required this.parser,
     required this.executor,
+    this.onResult,
   });
 
-  Future<void> handleVoice(String rawText) async {
-    final intent = parser.parseCommand(rawText);
+  Future<VoiceResult> handleVoice(String rawText) async {
+    final intent = parser.parse(rawText);
 
     if (!intent.isValid) {
-      _respondError(intent.error!);
-      return;
+      final message = 'Perintah tidak dikenali: "$rawText"';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
 
     if (!allowIntent(auth.role, intent)) {
-      _respondError('AKSES_DITOLAK');
-      return;
+      const message = 'Akses ditolak untuk perintah ini';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
 
     try {
       await executor.execute(intent);
-      _respondSuccess(intent);
+      final message = 'Berhasil: ${intent.type.name}';
+      onResult?.call(message, true);
+      return VoiceResult(success: true, message: message, intent: intent);
     } catch (e) {
-      _respondError(e.toString());
+      final message = 'Error: ${e.toString()}';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
   }
+}
 
-  void _respondSuccess(intent) {
-    print('✅ Berhasil: ${intent.type}');
-  }
+class VoiceResult {
+  final bool success;
+  final String message;
+  final Intent? intent;
 
-  void _respondError(String error) {
-    print('❌ Error: $error');
-  }
+  VoiceResult({
+    required this.success,
+    required this.message,
+    this.intent,
+  });
 }
