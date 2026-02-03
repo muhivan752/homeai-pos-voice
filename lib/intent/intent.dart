@@ -1,14 +1,3 @@
-import 'intent_type.dart';
-import 'intent_payload.dart';
-
-class Intent {
-  final String id;
-  final IntentType type;
-  final IntentPayload payload;
-
-  Intent({
-    required this.id,
-    required this.type,
-    required this.payload,
-  });
-}
+/// Re-export from domain layer for backward compatibility.
+/// New code should import from 'package:homeai_pos_voice/domain/domain.dart'
+export '../domain/intent/intent.dart';

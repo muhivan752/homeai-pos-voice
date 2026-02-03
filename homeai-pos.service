@@ -1,0 +1,36 @@
+# HomeAI POS Voice - Systemd Service Template
+#
+# Gunakan install.sh untuk deploy otomatis:
+#   sudo bash install.sh [port]
+#   Contoh: sudo bash install.sh 8088
+#
+# Atau setup manual:
+#   1. Copy file ini ke /etc/systemd/system/homeai-pos.service
+#   2. Sesuaikan User, WorkingDirectory, dan PATH
+#   3. Ganti PORT sesuai kebutuhan (default 8080)
+#   4. sudo systemctl daemon-reload && sudo systemctl enable --now homeai-pos
+
+[Unit]
+Description=HomeAI POS Voice Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=ivan_botak
+WorkingDirectory=/opt/homeai-pos-voice
+Environment="PATH=/opt/flutter/bin:/opt/dart-sdk/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/homeai-pos-voice/.env
+ExecStart=/opt/dart-sdk/bin/dart run bin/web_server.dart 8088
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening (optional, uncomment if needed)
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ProtectHome=read-only
+# ReadWritePaths=/opt/homeai-pos-voice
+
+[Install]
+WantedBy=multi-user.target

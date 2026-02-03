@@ -1,6 +1,39 @@
 name: homeai_voice
-description: Voice command PoC
+description: Voice-enabled POS for HomeAI
 version: 0.0.1
+publish_to: 'none'
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP for ERP communication
+  http: ^1.1.0
+
+  # Voice Input/Output
+  speech_to_text: ^6.6.0
+  flutter_tts: ^3.8.5
+
+  # State Management (simple, no overkill)
+  provider: ^6.1.1
+
+  # Cupertino icons for iOS-style UI
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  # Fonts (optional, add later)
+  # fonts:
+  #   - family: Roboto
+  #     fonts:
+  #       - asset: fonts/Roboto-Regular.ttf
