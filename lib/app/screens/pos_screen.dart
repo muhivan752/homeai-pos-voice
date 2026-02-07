@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/voice_provider.dart';
+import '../services/erp_service.dart';
 import '../widgets/cart_list.dart';
 import '../widgets/voice_button.dart';
 import '../widgets/status_display.dart';
@@ -15,11 +16,14 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
+  final _erpService = ErpService();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<VoiceProvider>().initialize();
+      _erpService.init();
     });
   }
 
@@ -175,25 +179,64 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Konfirmasi Pembayaran'),
-        content: Text('Total: Rp ${_formatCurrency(total)}'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.payment, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Konfirmasi Pembayaran'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Total:', style: TextStyle(fontSize: 16)),
+                  Text(
+                    'Rp ${_formatCurrency(total)}',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('BATAL'),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               cart.checkout();
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Pembayaran berhasil!'),
-                  backgroundColor: Colors.green,
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Pembayaran berhasil!'),
+                    ],
+                  ),
+                  backgroundColor: Colors.green.shade600,
+                  behavior: SnackBarBehavior.floating,
                 ),
               );
             },
-            child: const Text('BAYAR'),
+            icon: const Icon(Icons.check),
+            label: const Text('BAYAR'),
           ),
         ],
       ),
@@ -203,7 +246,10 @@ class _PosScreenState extends State<PosScreen> {
   void _showSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => const SettingsSheet(),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SettingsSheet(erpService: _erpService),
     );
   }
 
@@ -282,7 +328,9 @@ class CartBottomSheet extends StatelessWidget {
 }
 
 class SettingsSheet extends StatelessWidget {
-  const SettingsSheet({super.key});
+  final ErpService erpService;
+
+  const SettingsSheet({super.key, required this.erpService});
 
   @override
   Widget build(BuildContext context) {
@@ -292,25 +340,56 @@ class SettingsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           const Text(
             'Pengaturan',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 24),
-          ListTile(
-            leading: const Icon(Icons.cloud_outlined),
-            title: const Text('ERPNext Server'),
-            subtitle: const Text('Belum dikonfigurasi'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showErpSettings(context),
+          const SizedBox(height: 20),
+          _SettingsTile(
+            icon: Icons.cloud_outlined,
+            iconColor: Colors.blue,
+            title: 'ERPNext Server',
+            subtitle: erpService.isConfigured
+                ? erpService.baseUrl ?? 'Terkonfigurasi'
+                : 'Belum dikonfigurasi',
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) => ErpSettingsDialog(erpService: erpService),
+              );
+            },
           ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('Tentang Aplikasi'),
-            subtitle: const Text('HomeAI POS Voice v1.0.0'),
+          _SettingsTile(
+            icon: Icons.sync,
+            iconColor: Colors.orange,
+            title: 'Sinkronisasi Produk',
+            subtitle: 'Ambil produk dari ERPNext',
+            onTap: () {
+              Navigator.pop(context);
+              _syncProducts(context);
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.info_outline,
+            iconColor: Colors.grey,
+            title: 'Tentang Aplikasi',
+            subtitle: 'HomeAI POS Voice v1.0.0',
             onTap: () {},
           ),
         ],
@@ -318,17 +397,86 @@ class SettingsSheet extends StatelessWidget {
     );
   }
 
-  void _showErpSettings(BuildContext context) {
-    Navigator.pop(context);
-    showDialog(
-      context: context,
-      builder: (context) => const ErpSettingsDialog(),
+  void _syncProducts(BuildContext context) async {
+    if (!erpService.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Konfigurasi ERPNext terlebih dahulu'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Mengambil produk dari ERPNext...')),
+    );
+
+    final result = await erpService.getProducts();
+
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Berhasil mengambil ${result.data!.length} produk'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.errorMessage ?? 'Gagal mengambil produk'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: iconColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 13,
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
     );
   }
 }
 
 class ErpSettingsDialog extends StatefulWidget {
-  const ErpSettingsDialog({super.key});
+  final ErpService erpService;
+
+  const ErpSettingsDialog({super.key, required this.erpService});
 
   @override
   State<ErpSettingsDialog> createState() => _ErpSettingsDialogState();
@@ -338,39 +486,78 @@ class _ErpSettingsDialogState extends State<ErpSettingsDialog> {
   final _urlController = TextEditingController();
   final _apiKeyController = TextEditingController();
   final _apiSecretController = TextEditingController();
+  bool _isLoading = false;
+  bool _isTesting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlController.text = widget.erpService.baseUrl ?? '';
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('ERPNext Server'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.cloud, color: Colors.blue),
+          SizedBox(width: 8),
+          Text('ERPNext Server'),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _urlController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Server URL',
                 hintText: 'https://erp.example.com',
-                prefixIcon: Icon(Icons.link),
+                prefixIcon: const Icon(Icons.link),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _apiKeyController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'API Key',
-                prefixIcon: Icon(Icons.key),
+                prefixIcon: const Icon(Icons.key),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _apiSecretController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'API Secret',
-                prefixIcon: Icon(Icons.lock),
+                prefixIcon: const Icon(Icons.lock),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isTesting ? null : _testConnection,
+                icon: _isTesting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.wifi_find),
+                label: Text(_isTesting ? 'Mengecek...' : 'Test Koneksi'),
+              ),
             ),
           ],
         ),
@@ -381,17 +568,65 @@ class _ErpSettingsDialogState extends State<ErpSettingsDialog> {
           child: const Text('BATAL'),
         ),
         ElevatedButton(
-          onPressed: () {
-            // TODO: Save to shared_preferences
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Pengaturan disimpan')),
-            );
-          },
-          child: const Text('SIMPAN'),
+          onPressed: _isLoading ? null : _saveSettings,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('SIMPAN'),
         ),
       ],
     );
+  }
+
+  Future<void> _testConnection() async {
+    setState(() => _isTesting = true);
+
+    // Save temporarily for testing
+    await widget.erpService.saveConfig(
+      url: _urlController.text.trim(),
+      apiKey: _apiKeyController.text.trim(),
+      apiSecret: _apiSecretController.text.trim(),
+    );
+
+    final result = await widget.erpService.testConnection();
+
+    setState(() => _isTesting = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isSuccess ? 'Koneksi berhasil!' : result.errorMessage!,
+          ),
+          backgroundColor: result.isSuccess ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    setState(() => _isLoading = true);
+
+    await widget.erpService.saveConfig(
+      url: _urlController.text.trim(),
+      apiKey: _apiKeyController.text.trim(),
+      apiSecret: _apiSecretController.text.trim(),
+    );
+
+    setState(() => _isLoading = false);
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pengaturan disimpan'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   @override
