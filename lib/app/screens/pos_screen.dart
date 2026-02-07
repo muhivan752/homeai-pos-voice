@@ -10,6 +10,7 @@ import '../widgets/voice_button.dart';
 import '../widgets/status_display.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/sync_indicator.dart';
+import 'history_screen.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -86,6 +87,16 @@ class _PosScreenState extends State<PosScreen> {
                   ),
               ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              );
+            },
+            tooltip: 'Riwayat Transaksi',
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -426,6 +437,19 @@ class SettingsSheet extends StatelessWidget {
               showDialog(
                 context: context,
                 builder: (context) => ErpSettingsDialog(erpService: erpService),
+              );
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.history,
+            iconColor: Colors.green,
+            title: 'Riwayat Transaksi',
+            subtitle: 'Lihat semua transaksi',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
               );
             },
           ),
