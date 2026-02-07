@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/voice_provider.dart';
+import '../providers/product_provider.dart';
 import '../services/erp_service.dart';
+import '../services/sync_service.dart';
 import '../widgets/cart_list.dart';
 import '../widgets/voice_button.dart';
 import '../widgets/status_display.dart';
 import '../widgets/product_grid.dart';
+import '../widgets/sync_indicator.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -96,6 +99,9 @@ class _PosScreenState extends State<PosScreen> {
             // Status Display
             const StatusDisplay(),
 
+            // Sync Indicator
+            const SyncIndicator(),
+
             // Products
             const Expanded(child: ProductGrid()),
 
@@ -174,6 +180,7 @@ class _PosScreenState extends State<PosScreen> {
 
   void _checkout(BuildContext context) {
     final cart = context.read<CartProvider>();
+    final syncService = context.read<SyncService>();
     final total = cart.total;
 
     showDialog(
@@ -210,6 +217,26 @@ class _PosScreenState extends State<PosScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  syncService.isOnline ? Icons.cloud_done : Icons.cloud_off,
+                  size: 16,
+                  color: syncService.isOnline ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  syncService.isOnline
+                      ? 'Akan sync ke ERPNext'
+                      : 'Offline - akan sync nanti',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         actions: [
@@ -218,22 +245,49 @@ class _PosScreenState extends State<PosScreen> {
             child: const Text('BATAL'),
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              cart.checkout();
+            onPressed: () async {
               Navigator.pop(ctx);
+
+              // Show processing indicator
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
+                const SnackBar(
+                  content: Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('Pembayaran berhasil!'),
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Memproses transaksi...'),
                     ],
                   ),
-                  backgroundColor: Colors.green.shade600,
-                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 1),
                 ),
               );
+
+              // Process checkout (saves to local DB)
+              final transactionId = await cart.checkout();
+
+              if (transactionId != null) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Transaksi berhasil disimpan!'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green.shade600,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             },
             icon: const Icon(Icons.check),
             label: const Text('BAYAR'),

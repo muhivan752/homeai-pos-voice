@@ -1,19 +1,25 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../models/cart_item.dart';
 import '../models/product.dart';
+import '../database/database_helper.dart';
+import '../services/sync_service.dart';
 
 class CartProvider extends ChangeNotifier {
   final List<CartItem> _items = [];
+  final DatabaseHelper _db = DatabaseHelper();
+  final SyncService _syncService = SyncService();
+  final Uuid _uuid = const Uuid();
+
   String _lastMessage = '';
   bool _isSuccess = true;
+  bool _isProcessing = false;
 
   List<CartItem> get items => List.unmodifiable(_items);
-
   String get lastMessage => _lastMessage;
   bool get isSuccess => _isSuccess;
-
+  bool get isProcessing => _isProcessing;
   double get total => _items.fold(0, (sum, item) => sum + item.total);
-
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
   void addItem(Product product, int quantity) {
@@ -67,27 +73,82 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool checkout() {
+  /// Checkout and save transaction locally
+  /// Returns transaction ID if successful
+  Future<String?> checkout({
+    String? customerName,
+    String paymentMethod = 'Cash',
+  }) async {
     if (_items.isEmpty) {
       _lastMessage = 'Keranjang kosong!';
       _isSuccess = false;
       notifyListeners();
-      return false;
+      return null;
     }
 
-    final totalAmount = total;
-    final itemsCount = itemCount;
-
-    _items.clear();
-    _lastMessage = 'Checkout berhasil! Total: Rp ${_formatCurrency(totalAmount)} ($itemsCount item)';
-    _isSuccess = true;
+    _isProcessing = true;
     notifyListeners();
-    return true;
+
+    try {
+      final transactionId = _uuid.v4();
+      final totalAmount = total;
+      final now = DateTime.now().toIso8601String();
+
+      // Prepare transaction data
+      final transaction = {
+        'id': transactionId,
+        'total': totalAmount,
+        'payment_method': paymentMethod,
+        'customer_name': customerName ?? 'Walk-in Customer',
+        'status': 'completed',
+        'sync_status': 'pending', // Will be synced to ERP later
+        'created_at': now,
+      };
+
+      // Prepare items data
+      final transactionItems = _items.map((item) => {
+        'transaction_id': transactionId,
+        'product_id': item.id,
+        'product_name': item.name,
+        'quantity': item.quantity,
+        'price': item.price,
+        'subtotal': item.total,
+      }).toList();
+
+      // Save to local database
+      await _db.insertTransaction(transaction, transactionItems);
+
+      // Clear cart
+      final itemsCount = itemCount;
+      _items.clear();
+
+      _lastMessage = 'Transaksi berhasil! Total: Rp ${_formatCurrency(totalAmount)} ($itemsCount item)';
+      _isSuccess = true;
+      _isProcessing = false;
+      notifyListeners();
+
+      // Trigger background sync (non-blocking)
+      _syncService.syncNow();
+
+      return transactionId;
+    } catch (e) {
+      _lastMessage = 'Error: ${e.toString()}';
+      _isSuccess = false;
+      _isProcessing = false;
+      notifyListeners();
+      return null;
+    }
   }
 
   void setError(String message) {
     _lastMessage = message;
     _isSuccess = false;
+    notifyListeners();
+  }
+
+  void setSuccess(String message) {
+    _lastMessage = message;
+    _isSuccess = true;
     notifyListeners();
   }
 
