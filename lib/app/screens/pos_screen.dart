@@ -23,18 +23,66 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  void _showCart() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const CartBottomSheet(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('HomeAI POS Voice'),
+        title: const Row(
+          children: [
+            Icon(Icons.mic, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'POS Voice',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         actions: [
+          Consumer<CartProvider>(
+            builder: (context, cart, _) => Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.shopping_cart_outlined, size: 28),
+                  onPressed: _showCart,
+                ),
+                if (cart.itemCount > 0)
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      child: Text(
+                        '${cart.itemCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              context.read<CartProvider>().clearCart();
-            },
-            tooltip: 'Kosongkan Keranjang',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => _showSettings(context),
           ),
         ],
       ),
@@ -44,115 +92,72 @@ class _PosScreenState extends State<PosScreen> {
             // Status Display
             const StatusDisplay(),
 
-            // Main Content
-            Expanded(
-              child: Row(
-                children: [
-                  // Product Grid (Left)
-                  const Expanded(
-                    flex: 3,
-                    child: ProductGrid(),
-                  ),
+            // Products
+            const Expanded(child: ProductGrid()),
 
-                  // Divider
-                  const VerticalDivider(width: 1),
-
-                  // Cart (Right)
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      children: [
-                        // Cart Header
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          child: Row(
-                            children: [
-                              const Icon(Icons.shopping_cart),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Keranjang',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const Spacer(),
-                              Consumer<CartProvider>(
-                                builder: (context, cart, _) => Text(
-                                  '${cart.itemCount} item',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Cart Items
-                        const Expanded(child: CartList()),
-
-                        // Total & Checkout
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, -2),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              Consumer<CartProvider>(
-                                builder: (context, cart, _) => Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text(
-                                      'Total:',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Rp ${_formatCurrency(cart.total)}',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    context.read<CartProvider>().checkout();
-                                  },
-                                  icon: const Icon(Icons.payment),
-                                  label: const Text('CHECKOUT'),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+            // Bottom Bar with Total
+            Consumer<CartProvider>(
+              builder: (context, cart, _) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _showCart,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${cart.itemCount} item',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              'Rp ${_formatCurrency(cart.total)}',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: cart.itemCount > 0 ? () => _checkout(context) : null,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'BAYAR',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -163,10 +168,237 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  void _checkout(BuildContext context) {
+    final cart = context.read<CartProvider>();
+    final total = cart.total;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Pembayaran'),
+        content: Text('Total: Rp ${_formatCurrency(total)}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              cart.checkout();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Pembayaran berhasil!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('BAYAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => const SettingsSheet(),
+    );
+  }
+
   String _formatCurrency(double amount) {
     return amount.toStringAsFixed(0).replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (Match m) => '${m[1]}.',
     );
+  }
+}
+
+class CartBottomSheet extends StatelessWidget {
+  const CartBottomSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.shopping_cart),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Keranjang',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      context.read<CartProvider>().clearCart();
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Hapus'),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            // Cart Items
+            Expanded(
+              child: CartList(scrollController: scrollController),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SettingsSheet extends StatelessWidget {
+  const SettingsSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Pengaturan',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.cloud_outlined),
+            title: const Text('ERPNext Server'),
+            subtitle: const Text('Belum dikonfigurasi'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showErpSettings(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('Tentang Aplikasi'),
+            subtitle: const Text('HomeAI POS Voice v1.0.0'),
+            onTap: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErpSettings(BuildContext context) {
+    Navigator.pop(context);
+    showDialog(
+      context: context,
+      builder: (context) => const ErpSettingsDialog(),
+    );
+  }
+}
+
+class ErpSettingsDialog extends StatefulWidget {
+  const ErpSettingsDialog({super.key});
+
+  @override
+  State<ErpSettingsDialog> createState() => _ErpSettingsDialogState();
+}
+
+class _ErpSettingsDialogState extends State<ErpSettingsDialog> {
+  final _urlController = TextEditingController();
+  final _apiKeyController = TextEditingController();
+  final _apiSecretController = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('ERPNext Server'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _urlController,
+              decoration: const InputDecoration(
+                labelText: 'Server URL',
+                hintText: 'https://erp.example.com',
+                prefixIcon: Icon(Icons.link),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _apiKeyController,
+              decoration: const InputDecoration(
+                labelText: 'API Key',
+                prefixIcon: Icon(Icons.key),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _apiSecretController,
+              decoration: const InputDecoration(
+                labelText: 'API Secret',
+                prefixIcon: Icon(Icons.lock),
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('BATAL'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            // TODO: Save to shared_preferences
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Pengaturan disimpan')),
+            );
+          },
+          child: const Text('SIMPAN'),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    _apiKeyController.dispose();
+    _apiSecretController.dispose();
+    super.dispose();
   }
 }
