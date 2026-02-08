@@ -22,21 +22,35 @@ class CartProvider extends ChangeNotifier {
   double get total => _items.fold(0, (sum, item) => sum + item.total);
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
-  void addItem(Product product, int quantity) {
-    final existingIndex = _items.indexWhere((item) => item.id == product.id);
+  void addItem(dynamic productOrId, [String? name, double? price, int quantity = 1]) {
+    String id;
+    String itemName;
+    double itemPrice;
+
+    if (productOrId is Product) {
+      id = productOrId.id;
+      itemName = productOrId.name;
+      itemPrice = productOrId.price;
+    } else {
+      id = productOrId.toString();
+      itemName = name ?? 'Unknown';
+      itemPrice = price ?? 0;
+    }
+
+    final existingIndex = _items.indexWhere((item) => item.id == id);
 
     if (existingIndex >= 0) {
       _items[existingIndex].quantity += quantity;
     } else {
       _items.add(CartItem(
-        id: product.id,
-        name: product.name,
-        price: product.price,
+        id: id,
+        name: itemName,
+        price: itemPrice,
         quantity: quantity,
       ));
     }
 
-    _lastMessage = 'Ditambahkan: ${product.name} x$quantity';
+    _lastMessage = 'Ditambahkan: $itemName x$quantity';
     _isSuccess = true;
     notifyListeners();
   }
@@ -79,6 +93,22 @@ class CartProvider extends ChangeNotifier {
     String? customerName,
     String paymentMethod = 'Cash',
   }) async {
+    return checkoutWithPayment(
+      paymentMethod: paymentMethod,
+      customerName: customerName,
+    );
+  }
+
+  /// Checkout with full payment details
+  Future<String?> checkoutWithPayment({
+    required String paymentMethod,
+    double? paymentAmount,
+    double? changeAmount,
+    String? paymentReference,
+    String? cashierId,
+    String? cashierName,
+    String? customerName,
+  }) async {
     if (_items.isEmpty) {
       _lastMessage = 'Keranjang kosong!';
       _isSuccess = false;
@@ -99,9 +129,14 @@ class CartProvider extends ChangeNotifier {
         'id': transactionId,
         'total': totalAmount,
         'payment_method': paymentMethod,
+        'payment_amount': paymentAmount ?? totalAmount,
+        'change_amount': changeAmount ?? 0,
+        'payment_reference': paymentReference,
         'customer_name': customerName ?? 'Walk-in Customer',
+        'cashier_id': cashierId,
+        'cashier_name': cashierName,
         'status': 'completed',
-        'sync_status': 'pending', // Will be synced to ERP later
+        'sync_status': 'pending',
         'created_at': now,
       };
 

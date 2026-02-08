@@ -4,6 +4,7 @@ class Product {
   final double price;
   final String category;
   final List<String> aliases;
+  final String? barcode;
 
   const Product({
     required this.id,
@@ -11,6 +12,7 @@ class Product {
     required this.price,
     required this.category,
     this.aliases = const [],
+    this.barcode,
   });
 
   // Sample products for demo
@@ -19,57 +21,81 @@ class Product {
       id: 'kopi-susu',
       name: 'Kopi Susu',
       price: 18000,
-      category: 'Minuman',
+      category: 'drink',
       aliases: ['kopi susu', 'kosu', 'kop sus'],
+      barcode: '8991234567001',
     ),
     const Product(
       id: 'es-teh',
       name: 'Es Teh',
       price: 8000,
-      category: 'Minuman',
+      category: 'drink',
       aliases: ['es teh', 'esteh', 'teh es'],
+      barcode: '8991234567002',
     ),
     const Product(
       id: 'americano',
       name: 'Americano',
       price: 22000,
-      category: 'Minuman',
+      category: 'drink',
       aliases: ['americano', 'amerika', 'kopi amerika'],
+      barcode: '8991234567003',
     ),
     const Product(
       id: 'latte',
       name: 'Cafe Latte',
       price: 25000,
-      category: 'Minuman',
+      category: 'drink',
       aliases: ['latte', 'late', 'kopi latte'],
+      barcode: '8991234567004',
     ),
     const Product(
       id: 'cappuccino',
       name: 'Cappuccino',
       price: 25000,
-      category: 'Minuman',
+      category: 'drink',
       aliases: ['cappuccino', 'kapucino', 'capucino'],
+      barcode: '8991234567005',
     ),
     const Product(
       id: 'roti-bakar',
       name: 'Roti Bakar',
       price: 15000,
-      category: 'Makanan',
+      category: 'food',
       aliases: ['roti bakar', 'rotibakar', 'robar'],
+      barcode: '8991234567006',
     ),
     const Product(
       id: 'kentang-goreng',
       name: 'Kentang Goreng',
       price: 20000,
-      category: 'Makanan',
+      category: 'food',
       aliases: ['kentang goreng', 'kentang', 'french fries'],
+      barcode: '8991234567007',
     ),
     const Product(
       id: 'nasi-goreng',
       name: 'Nasi Goreng',
       price: 25000,
-      category: 'Makanan',
+      category: 'food',
       aliases: ['nasi goreng', 'nasgor', 'nasigoreng'],
+      barcode: '8991234567008',
+    ),
+    const Product(
+      id: 'keripik',
+      name: 'Keripik Kentang',
+      price: 12000,
+      category: 'snack',
+      aliases: ['keripik', 'chips', 'potato chips'],
+      barcode: '8991234567009',
+    ),
+    const Product(
+      id: 'coklat',
+      name: 'Coklat Bar',
+      price: 15000,
+      category: 'snack',
+      aliases: ['coklat', 'chocolate', 'cokelat'],
+      barcode: '8991234567010',
     ),
   ];
 

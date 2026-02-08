@@ -20,18 +20,32 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    // Users table - for cashier/staff login
+    await db.execute('''
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT DEFAULT 'cashier',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
     // Products table - cached from ERPNext
     await db.execute('''
       CREATE TABLE products (
         id TEXT PRIMARY KEY,
         item_code TEXT NOT NULL,
+        barcode TEXT,
         name TEXT NOT NULL,
         price REAL NOT NULL,
         category TEXT,
@@ -43,19 +57,37 @@ class DatabaseHelper {
       )
     ''');
 
+    // Categories table
+    await db.execute('''
+      CREATE TABLE categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        icon TEXT,
+        color TEXT,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1
+      )
+    ''');
+
     // Transactions table - local sales
     await db.execute('''
       CREATE TABLE transactions (
         id TEXT PRIMARY KEY,
         total REAL NOT NULL,
-        payment_method TEXT DEFAULT 'Cash',
+        payment_method TEXT DEFAULT 'cash',
+        payment_amount REAL,
+        change_amount REAL DEFAULT 0,
+        payment_reference TEXT,
         customer_name TEXT,
+        cashier_id TEXT,
+        cashier_name TEXT,
         status TEXT DEFAULT 'completed',
         erp_invoice_id TEXT,
         sync_status TEXT DEFAULT 'pending',
         sync_error TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        synced_at TEXT
+        synced_at TEXT,
+        FOREIGN KEY (cashier_id) REFERENCES users(id)
       )
     ''');
 
@@ -93,10 +125,97 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_transactions_sync ON transactions(sync_status)');
     await db.execute('CREATE INDEX idx_sync_queue_status ON sync_queue(status)');
     await db.execute('CREATE INDEX idx_products_active ON products(is_active)');
+    await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
+    await db.execute('CREATE INDEX idx_products_category ON products(category)');
+    await db.execute('CREATE INDEX idx_users_username ON users(username)');
+
+    // Insert default admin user (password: admin123)
+    await db.insert('users', {
+      'id': 'admin',
+      'username': 'admin',
+      'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f', // admin123
+      'name': 'Administrator',
+      'role': 'admin',
+      'is_active': 1,
+    });
+
+    // Insert default categories
+    await db.insert('categories', {'id': 'all', 'name': 'Semua', 'icon': 'grid_view', 'sort_order': 0});
+    await db.insert('categories', {'id': 'food', 'name': 'Makanan', 'icon': 'restaurant', 'sort_order': 1});
+    await db.insert('categories', {'id': 'drink', 'name': 'Minuman', 'icon': 'local_cafe', 'sort_order': 2});
+    await db.insert('categories', {'id': 'snack', 'name': 'Snack', 'icon': 'cookie', 'sort_order': 3});
+    await db.insert('categories', {'id': 'other', 'name': 'Lainnya', 'icon': 'category', 'sort_order': 4});
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle future migrations here
+    if (oldVersion < 2) {
+      // Add users table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT DEFAULT 'cashier',
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+
+      // Add categories table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          icon TEXT,
+          color TEXT,
+          sort_order INTEGER DEFAULT 0,
+          is_active INTEGER DEFAULT 1
+        )
+      ''');
+
+      // Add new columns to products
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+      } catch (_) {}
+
+      // Add new columns to transactions
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN payment_amount REAL');
+        await db.execute('ALTER TABLE transactions ADD COLUMN change_amount REAL DEFAULT 0');
+        await db.execute('ALTER TABLE transactions ADD COLUMN payment_reference TEXT');
+        await db.execute('ALTER TABLE transactions ADD COLUMN cashier_id TEXT');
+        await db.execute('ALTER TABLE transactions ADD COLUMN cashier_name TEXT');
+      } catch (_) {}
+
+      // Create new indexes
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+      } catch (_) {}
+
+      // Insert default admin user
+      try {
+        await db.insert('users', {
+          'id': 'admin',
+          'username': 'admin',
+          'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f',
+          'name': 'Administrator',
+          'role': 'admin',
+          'is_active': 1,
+        });
+      } catch (_) {}
+
+      // Insert default categories
+      try {
+        await db.insert('categories', {'id': 'all', 'name': 'Semua', 'icon': 'grid_view', 'sort_order': 0});
+        await db.insert('categories', {'id': 'food', 'name': 'Makanan', 'icon': 'restaurant', 'sort_order': 1});
+        await db.insert('categories', {'id': 'drink', 'name': 'Minuman', 'icon': 'local_cafe', 'sort_order': 2});
+        await db.insert('categories', {'id': 'snack', 'name': 'Snack', 'icon': 'cookie', 'sort_order': 3});
+        await db.insert('categories', {'id': 'other', 'name': 'Lainnya', 'icon': 'category', 'sort_order': 4});
+      } catch (_) {}
+    }
   }
 
   // ============ PRODUCTS ============
@@ -155,6 +274,86 @@ class DatabaseHelper {
   Future<int> clearProducts() async {
     final db = await database;
     return await db.delete('products');
+  }
+
+  Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
+    final db = await database;
+    final results = await db.query(
+      'products',
+      where: 'barcode = ? AND is_active = 1',
+      whereArgs: [barcode],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> searchProducts(String query) async {
+    final db = await database;
+    final lowerQuery = query.toLowerCase();
+    return await db.rawQuery('''
+      SELECT * FROM products
+      WHERE is_active = 1
+        AND (LOWER(name) LIKE ? OR LOWER(aliases) LIKE ? OR barcode LIKE ?)
+      ORDER BY name
+      LIMIT 20
+    ''', ['%$lowerQuery%', '%$lowerQuery%', '%$query%']);
+  }
+
+  Future<List<Map<String, dynamic>>> getProductsByCategory(String? category) async {
+    final db = await database;
+    if (category == null || category == 'all') {
+      return await db.query('products', where: 'is_active = 1', orderBy: 'name');
+    }
+    return await db.query(
+      'products',
+      where: 'is_active = 1 AND category = ?',
+      whereArgs: [category],
+      orderBy: 'name',
+    );
+  }
+
+  // ============ CATEGORIES ============
+
+  Future<List<Map<String, dynamic>>> getCategories() async {
+    final db = await database;
+    return await db.query('categories', where: 'is_active = 1', orderBy: 'sort_order');
+  }
+
+  Future<int> insertCategory(Map<String, dynamic> category) async {
+    final db = await database;
+    return await db.insert('categories', category, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ============ USERS ============
+
+  Future<Map<String, dynamic>?> getUserByUsername(String username) async {
+    final db = await database;
+    final results = await db.query(
+      'users',
+      where: 'username = ? AND is_active = 1',
+      whereArgs: [username],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<Map<String, dynamic>?> getUserById(String id) async {
+    final db = await database;
+    final results = await db.query('users', where: 'id = ?', whereArgs: [id]);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getUsers() async {
+    final db = await database;
+    return await db.query('users', where: 'is_active = 1', orderBy: 'name');
+  }
+
+  Future<int> insertUser(Map<String, dynamic> user) async {
+    final db = await database;
+    return await db.insert('users', user);
+  }
+
+  Future<int> updateUser(String id, Map<String, dynamic> updates) async {
+    final db = await database;
+    return await db.update('users', updates, where: 'id = ?', whereArgs: [id]);
   }
 
   // ============ TRANSACTIONS ============

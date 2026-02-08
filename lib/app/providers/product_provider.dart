@@ -6,11 +6,16 @@ class ProductProvider extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper();
 
   List<Product> _products = [];
+  List<Product> _filteredProducts = [];
+  List<Map<String, dynamic>> _categories = [];
+  String? _selectedCategory;
   bool _isLoading = false;
   String? _error;
   DateTime? _lastSyncedAt;
 
-  List<Product> get products => _products;
+  List<Product> get products => _selectedCategory == null ? _products : _filteredProducts;
+  List<Map<String, dynamic>> get categories => _categories;
+  String? get selectedCategory => _selectedCategory;
   bool get isLoading => _isLoading;
   String? get error => _error;
   DateTime? get lastSyncedAt => _lastSyncedAt;
@@ -30,6 +35,18 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Load categories
+      _categories = await _db.getCategories();
+      if (_categories.isEmpty) {
+        _categories = [
+          {'id': 'all', 'name': 'Semua', 'icon': 'grid_view'},
+          {'id': 'food', 'name': 'Makanan', 'icon': 'restaurant'},
+          {'id': 'drink', 'name': 'Minuman', 'icon': 'local_cafe'},
+          {'id': 'snack', 'name': 'Snack', 'icon': 'cookie'},
+          {'id': 'other', 'name': 'Lainnya', 'icon': 'category'},
+        ];
+      }
+
       final dbProducts = await _db.getProducts();
 
       if (dbProducts.isNotEmpty) {
@@ -37,8 +54,9 @@ class ProductProvider extends ChangeNotifier {
           id: p['id'] ?? p['item_code'],
           name: p['name'],
           price: (p['price'] as num).toDouble(),
-          category: p['category'] ?? 'Lainnya',
+          category: p['category'] ?? 'other',
           aliases: (p['aliases'] as String?)?.split(',') ?? [],
+          barcode: p['barcode'],
         )).toList();
 
         if (dbProducts.first['synced_at'] != null) {
@@ -56,6 +74,38 @@ class ProductProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  void setCategory(String? category) {
+    _selectedCategory = category;
+    if (category == null || category == 'all') {
+      _filteredProducts = _products;
+    } else {
+      _filteredProducts = _products.where((p) => p.category == category).toList();
+    }
+    notifyListeners();
+  }
+
+  Future<Product?> findByBarcode(String barcode) async {
+    // Check in memory first
+    for (final product in _products) {
+      if (product.barcode == barcode) return product;
+    }
+
+    // Check in database
+    final dbProduct = await _db.getProductByBarcode(barcode);
+    if (dbProduct != null) {
+      return Product(
+        id: dbProduct['id'] ?? dbProduct['item_code'],
+        name: dbProduct['name'],
+        price: (dbProduct['price'] as num).toDouble(),
+        category: dbProduct['category'] ?? 'other',
+        aliases: (dbProduct['aliases'] as String?)?.split(',') ?? [],
+        barcode: dbProduct['barcode'],
+      );
+    }
+
+    return null;
   }
 
   Product? findProduct(String query) {

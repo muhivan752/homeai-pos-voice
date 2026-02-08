@@ -6,6 +6,7 @@ import 'app/providers/voice_provider.dart';
 import 'app/providers/product_provider.dart';
 import 'app/services/sync_service.dart';
 import 'app/services/erp_service.dart';
+import 'app/services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,9 +14,11 @@ void main() async {
   // Initialize services
   final erpService = ErpService();
   final syncService = SyncService();
+  final authService = AuthService();
 
   await erpService.init();
   await syncService.init();
+  await authService.init();
 
   runApp(
     MultiProvider(
@@ -24,6 +27,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => VoiceProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()..loadProducts()),
         ChangeNotifierProvider.value(value: syncService),
+        ChangeNotifierProvider.value(value: authService),
       ],
       child: const PosApp(),
     ),

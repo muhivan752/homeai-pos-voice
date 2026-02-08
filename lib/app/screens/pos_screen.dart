@@ -5,12 +5,17 @@ import '../providers/voice_provider.dart';
 import '../providers/product_provider.dart';
 import '../services/erp_service.dart';
 import '../services/sync_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/cart_list.dart';
 import '../widgets/voice_button.dart';
 import '../widgets/status_display.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/sync_indicator.dart';
+import '../widgets/barcode_scanner.dart';
+import '../widgets/product_search.dart';
 import 'history_screen.dart';
+import 'payment_screen.dart';
+import 'login_screen.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -37,6 +42,91 @@ class _PosScreenState extends State<PosScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const CartBottomSheet(),
+    );
+  }
+
+  void _showSearch(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: ProductSearch(
+                  onProductSelected: (product) {
+                    final cart = context.read<CartProvider>();
+                    cart.addItem(
+                      product['id'],
+                      product['name'],
+                      (product['price'] as num).toDouble(),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${product['name']} ditambahkan'),
+                        duration: const Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openBarcodeScanner(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BarcodeScanner(
+          onBarcodeScanned: (barcode) async {
+            final productProvider = context.read<ProductProvider>();
+            final product = await productProvider.findByBarcode(barcode);
+
+            if (product != null) {
+              final cart = context.read<CartProvider>();
+              cart.addItem(product.id, product.name, product.price);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${product.name} ditambahkan'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Produk dengan barcode $barcode tidak ditemukan'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+      ),
     );
   }
 
@@ -112,6 +202,74 @@ class _PosScreenState extends State<PosScreen> {
 
             // Sync Indicator
             const SyncIndicator(),
+
+            // Search and Scan buttons
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _showSearch(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.search,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Cari produk...',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      onPressed: () => _openBarcodeScanner(context),
+                      icon: Icon(
+                        Icons.qr_code_scanner,
+                        color: Theme.of(context).colorScheme.onSecondaryContainer,
+                      ),
+                      tooltip: 'Scan Barcode',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Category Filter
+            Consumer<ProductProvider>(
+              builder: (context, productProvider, _) {
+                if (productProvider.categories.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return CategoryFilter(
+                  selectedCategory: productProvider.selectedCategory,
+                  categories: productProvider.categories,
+                  onCategorySelected: (category) {
+                    productProvider.setCategory(category);
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 8),
 
             // Products
             const Expanded(child: ProductGrid()),
@@ -191,119 +349,80 @@ class _PosScreenState extends State<PosScreen> {
 
   void _checkout(BuildContext context) {
     final cart = context.read<CartProvider>();
-    final syncService = context.read<SyncService>();
+    final authService = context.read<AuthService>();
     final total = cart.total;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.payment, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Konfirmasi Pembayaran'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total:', style: TextStyle(fontSize: 16)),
-                  Text(
-                    'Rp ${_formatCurrency(total)}',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  syncService.isOnline ? Icons.cloud_done : Icons.cloud_off,
-                  size: 16,
-                  color: syncService.isOnline ? Colors.green : Colors.orange,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  syncService.isOnline
-                      ? 'Akan sync ke ERPNext'
-                      : 'Offline - akan sync nanti',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('BATAL'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentScreen(
+          total: total,
+          onPaymentComplete: (result) async {
+            Navigator.pop(context);
 
-              // Show processing indicator
+            // Show processing indicator
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Memproses transaksi...'),
+                  ],
+                ),
+                duration: Duration(seconds: 1),
+              ),
+            );
+
+            // Process checkout with payment details
+            final transactionId = await cart.checkoutWithPayment(
+              paymentMethod: result.method,
+              paymentAmount: result.amount,
+              changeAmount: result.change,
+              paymentReference: result.reference,
+              cashierId: authService.currentUserId,
+              cashierName: authService.currentUserName,
+            );
+
+            if (transactionId != null) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   content: Row(
                     children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+                      const Icon(Icons.check_circle, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Transaksi berhasil!'),
+                            if (result.method == 'cash' && result.change > 0)
+                              Text(
+                                'Kembalian: Rp ${_formatCurrency(result.change)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                          ],
                         ),
                       ),
-                      SizedBox(width: 12),
-                      Text('Memproses transaksi...'),
                     ],
                   ),
-                  duration: Duration(seconds: 1),
+                  backgroundColor: Colors.green.shade600,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 3),
                 ),
               );
-
-              // Process checkout (saves to local DB)
-              final transactionId = await cart.checkout();
-
-              if (transactionId != null) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('Transaksi berhasil disimpan!'),
-                      ],
-                    ),
-                    backgroundColor: Colors.green.shade600,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            icon: const Icon(Icons.check),
-            label: const Text('BAYAR'),
-          ),
-        ],
+            }
+          },
+        ),
       ),
     );
   }
@@ -399,6 +518,8 @@ class SettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = context.watch<AuthService>();
+
     return Container(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -417,14 +538,45 @@ class SettingsSheet extends StatelessWidget {
               ),
             ),
           ),
-          const Text(
-            'Pengaturan',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+          // User Info
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.person,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    authService.currentUserName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    authService.isAdmin ? 'Administrator' : 'Kasir',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 12),
           _SettingsTile(
             icon: Icons.cloud_outlined,
             iconColor: Colors.blue,
@@ -469,6 +621,44 @@ class SettingsSheet extends StatelessWidget {
             title: 'Tentang Aplikasi',
             subtitle: 'HomeAI POS Voice v1.0.0',
             onTap: () {},
+          ),
+          const Divider(),
+          _SettingsTile(
+            icon: Icons.logout,
+            iconColor: Colors.red,
+            title: 'Keluar',
+            subtitle: 'Logout dari aplikasi',
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Konfirmasi Logout'),
+                  content: const Text('Apakah Anda yakin ingin keluar?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('BATAL'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        authService.logout();
+                        Navigator.pop(ctx);
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('KELUAR'),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),

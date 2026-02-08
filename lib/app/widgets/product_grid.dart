@@ -2,88 +2,72 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/product.dart';
 import '../providers/cart_provider.dart';
+import '../providers/product_provider.dart';
 
 class ProductGrid extends StatelessWidget {
   const ProductGrid({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final products = Product.sampleProducts;
+    return Consumer<ProductProvider>(
+      builder: (context, productProvider, _) {
+        if (productProvider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    // Group by category
-    final categories = <String, List<Product>>{};
-    for (final product in products) {
-      categories.putIfAbsent(product.category, () => []).add(product);
-    }
+        final products = productProvider.products;
 
-    return DefaultTabController(
-      length: categories.length,
-      child: Column(
-        children: [
-          // Category Tabs
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1,
+        if (products.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-              ),
-            ),
-            child: TabBar(
-              labelColor: Theme.of(context).colorScheme.primary,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-              indicatorColor: Theme.of(context).colorScheme.primary,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-              tabs: categories.keys.map((category) {
-                final icon = category == 'Minuman' ? Icons.local_cafe : Icons.restaurant;
-                return Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 20),
-                      const SizedBox(width: 8),
-                      Text(category),
-                    ],
+                const SizedBox(height: 16),
+                Text(
+                  'Belum ada produk',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                );
-              }).toList(),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => productProvider.loadProducts(),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Muat Ulang'),
+                ),
+              ],
             ),
-          ),
+          );
+        }
 
-          // Products Grid
-          Expanded(
-            child: TabBarView(
-              children: categories.entries.map((entry) {
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Responsive: 2 columns on phone, more on tablet
-                    int crossAxisCount = 2;
-                    if (constraints.maxWidth > 600) crossAxisCount = 3;
-                    if (constraints.maxWidth > 900) crossAxisCount = 4;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            int crossAxisCount = 2;
+            if (constraints.maxWidth > 600) crossAxisCount = 3;
+            if (constraints.maxWidth > 900) crossAxisCount = 4;
 
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        childAspectRatio: 0.9,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                      ),
-                      itemCount: entry.value.length,
-                      itemBuilder: (context, index) {
-                        return _ProductCard(product: entry.value[index]);
-                      },
-                    );
-                  },
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
+            return GridView.builder(
+              padding: const EdgeInsets.all(12),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: 0.9,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: products.length,
+              itemBuilder: (context, index) {
+                return _ProductCard(product: products[index]);
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -106,7 +90,7 @@ class _ProductCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          context.read<CartProvider>().addItem(product, 1);
+          context.read<CartProvider>().addItem(product);
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -192,10 +176,12 @@ class _ProductCard extends StatelessWidget {
 
   IconData _getProductIcon(String category) {
     switch (category) {
-      case 'Minuman':
+      case 'drink':
         return Icons.local_cafe;
-      case 'Makanan':
+      case 'food':
         return Icons.restaurant;
+      case 'snack':
+        return Icons.cookie;
       default:
         return Icons.inventory_2;
     }
