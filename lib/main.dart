@@ -1,15 +1,35 @@
-import 'core/voice_command_coordinator.dart';
-import 'core/auth_context.dart';
-import 'intent/intent_parser.dart';
-import 'intent/intent_executor.dart';
-import 'core/erp_client.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'app/pos_app.dart';
+import 'app/providers/cart_provider.dart';
+import 'app/providers/voice_provider.dart';
+import 'app/providers/product_provider.dart';
+import 'app/services/sync_service.dart';
+import 'app/services/erp_service.dart';
+import 'app/services/auth_service.dart';
 
 void main() async {
-  final coordinator = VoiceCommandCoordinator(
-    auth: AuthContext(UserRole.barista),
-    parser: IntentParser(),
-    executor: IntentExecutor(ERPClient()),
-  );
+  WidgetsFlutterBinding.ensureInitialized();
 
-  await coordinator.handleVoice("jual kopi susu 2");
+  // Initialize services
+  final erpService = ErpService();
+  final syncService = SyncService();
+  final authService = AuthService();
+
+  await erpService.init();
+  await syncService.init();
+  await authService.init();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => VoiceProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()..loadProducts()),
+        ChangeNotifierProvider.value(value: syncService),
+        ChangeNotifierProvider.value(value: authService),
+      ],
+      child: const PosApp(),
+    ),
+  );
 }
