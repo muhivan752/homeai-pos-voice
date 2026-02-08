@@ -2,79 +2,131 @@
 
 ## Gambaran Proyek
 
-**homeai_voice** adalah proof-of-concept (PoC) sistem Point of Sale (POS) berbasis suara untuk kedai kopi. Staf (barista) mencatat penjualan dan melakukan checkout menggunakan perintah suara. Teks yang diucapkan di-parse menjadi intent bertipe, divalidasi berdasarkan kontrol akses berbasis peran (role), lalu dieksekusi ke backend ERPNext.
+**HomeAI POS Voice** adalah sistem Point of Sale (POS) berbasis suara bertenaga AI untuk kedai kopi. Seluruh interaksi dilakukan melalui voice command. Arsitektur menggunakan 3 layer: **POS (mulut & tangan)** -> **LocalDB (buffer offline)** -> **ERP (otak bisnis)**.
 
-**Status:** PoC tahap awal. Baru intent `sellItem` dan `checkout` yang diimplementasi. Parser menggunakan pencocokan kata kunci sederhana (belum NLP).
+**Status:** PoC dengan fitur lengkap — sell, checkout, cancel, cek stok, laporan, sync, login.
 
 ## Tech Stack
 
 - **Bahasa:** Dart (SDK >=3.0.0 <4.0.0)
-- **Runtime:** Dart CLI (bukan Flutter)
+- **Runtime:** Dart CLI
 - **API Eksternal:** ERPNext/Frappe REST API (HTTP, token auth)
 - **Package manager:** `dart pub`
-- **Dependensi:** package `http` (digunakan di `erp_client.dart`, direferensikan via `package:http`)
+- **Dependensi:** `http`, `crypto`, `path`
+
+## Arsitektur 3 Layer
+
+```
+  Layer 1: HomeAI POS (Voice Interface)
+  Mulut & tangan — terima suara, tampilkan respons
+            |
+  Layer 2: LocalDB (Offline Buffer)
+  Semua transaksi masuk sini dulu, jaga-jaga kalau ERP mati
+            |
+  Layer 3: ERP (Otak Bisnis)
+  Source of truth — master data, harga, stok, laporan
+```
+
+### Alur Data
+
+```
+VoiceInput -> IntentParser -> Intent -> RoleGatekeeper -> IntentExecutor -> LocalIntentPort -> LocalDB
+                                                                                                 |
+                                                                               SyncEngine (auto/manual)
+                                                                                                 |
+                                                                                            ERPClient
+```
 
 ## Struktur Proyek
 
 ```
 lib/
-  main.dart                          # Entry point: menyambungkan coordinator dan menjalankan contoh perintah
+  main.dart                          # Entry point + demo simulasi voice commands
   core/
-    auth_context .dart               # Enum UserRole (barista, spv, owner) + AuthContext
-    voice_command_coordinator.dart   # Orkestrator: parse -> validasi -> eksekusi
-    role_gatekeeper.dart             # allowIntent(role, intent) -> bool
-    erp_client.dart                  # HTTP client untuk ERPNext Sales Invoice API
-    erp_sales_adapter.dart           # Adapter stub dengan output berbasis print
+    auth_context.dart                # UserRole enum, AuthContext, AuthService (login + password)
+    voice_command_coordinator.dart   # Orkestrator utama: login -> parse -> validate -> execute -> save
+    role_gatekeeper.dart             # allowIntent(role, intent) berbasis IntentType
+    erp_client.dart                  # HTTP client ke ERPNext (sales invoice, stok, health check)
   intent/
-    intent.dart                      # Data class Intent (id, type, payload)
-    intent_type.dart                 # Enum IntentType: sellItem, checkout, unknown
-    intent_payload.dart              # Sealed class: SellItemPayload, CheckoutPayload, UnknownPayload
-    intent_parser.dart               # Parser berbasis kata kunci (jual -> sellItem, checkout/bayar -> checkout)
-    intent_executor.dart             # Mendispatch intent ke IntentPort berdasarkan tipe
-    intent_port.dart                 # Interface abstrak: sellItem(), checkout()
-    intent_contract.dart             # Kontrak abstrak IntentExecutor (canHandle + execute)
-    mock_intent_port.dart            # Mock IntentPort yang mencetak aksi
+    intent.dart                      # Data class Intent (id, type, payload, createdAt)
+    intent_type.dart                 # IntentType enum (8 tipe)
+    intent_payload.dart              # Sealed class hierarchy (7 payload types)
+    intent_parser.dart               # Parser NL -> Intent (keyword matching + regex qty extraction)
+    intent_executor.dart             # Dispatch intent ke IntentPort, return pesan respons
+    intent_port.dart                 # Interface abstrak untuk eksekusi intent
+    mock_intent_port.dart            # Mock implementation untuk testing
+  db/
+    local_db.dart                    # LocalDB: cart, transaksi, stok, laporan (JSON file-based)
+    local_intent_port.dart           # IntentPort implementation berbasis LocalDB
+  sync/
+    sync_engine.dart                 # Auto-sync + manual sync ke ERP, status tracking
   ui/
-    post_screen.dart                 # Titik integrasi UI (initState + onMicPressed)
+    post_screen.dart                 # Contoh integrasi UI (placeholder Flutter widget)
   voice/
-    voice_input.dart                 # Handler input suara berbasis callback
-bin/
-  homeai_voice.dart                  # Entry point lama (iterasi sebelumnya, ada masalah sintaks)
+    voice_input.dart                 # Handler input suara + callback respons
 ```
 
-**Catatan:** `lib/core/auth_context .dart` memiliki spasi di akhir nama file.
+## Intent Types
 
-## Arsitektur
+| IntentType   | Contoh Voice Command                | Role Minimum |
+|-------------|-------------------------------------|-------------|
+| `login`      | "login admin admin123"              | Semua       |
+| `sellItem`   | "jual kopi susu 2", "tambah latte"  | barista     |
+| `checkout`   | "bayar qris", "checkout"            | barista     |
+| `cancelItem` | "batal americano", "cancel"         | barista     |
+| `checkStock` | "cek stok", "stok matcha"           | spv         |
+| `dailyReport`| "laporan", "rekap"                  | spv         |
+| `syncManual` | "sync", "sinkron"                   | spv         |
+| `unknown`    | (tidak dikenali)                    | -           |
 
-Sistem menggunakan pola **Ports and Adapters** (heksagonal):
+## Hak Akses (Role-Based)
 
-```
-Voice Input -> IntentParser -> Intent -> RoleGatekeeper -> IntentExecutor -> IntentPort (impl)
-                                                                              |
-                                                              ERPClient / MockIntentPort
-```
+| Peran   | Akses                                          |
+|---------|------------------------------------------------|
+| barista | sellItem, checkout, cancelItem                  |
+| spv     | semua barista + checkStock, dailyReport, sync   |
+| owner   | full access                                     |
+| admin   | full access                                     |
 
-1. **VoiceInput** menangkap teks suara melalui callback
-2. **VoiceCommandCoordinator** mengorkestrasi seluruh pipeline
-3. **IntentParser** mengubah teks mentah menjadi `Intent` bertipe (pencocokan kata kunci)
-4. **RoleGatekeeper** memeriksa apakah peran pengguna mengizinkan intent tersebut
-5. **IntentExecutor** mendispatch ke method `IntentPort` yang sesuai
-6. **IntentPort** adalah interface abstrak; implementasinya termasuk `ERPClient` (produksi) dan `MockIntentPort` (testing)
+## Auth System
 
-### Tipe-Tipe Utama
+- Password di-hash dengan SHA-256 (`package:crypto`)
+- Default admin: **username:** `admin`, **password:** `admin123`
+- Login via voice: `"login [username] [password]"`
+- Semua perintah selain login butuh autentikasi
 
-- `Intent` — data class immutable dengan `id`, `type`, `payload`
-- `IntentPayload` — hierarki sealed class (`SellItemPayload{item, qty}`, `CheckoutPayload`, `UnknownPayload`)
-- `IntentType` — enum: `sellItem`, `checkout`, `unknown`
-- `UserRole` — enum: `barista`, `spv`, `owner`
+### Default Users (di main.dart)
 
-### Hak Akses Berdasarkan Peran
+| Username  | Password    | Role    |
+|-----------|-------------|---------|
+| admin     | admin123    | admin   |
+| barista1  | barista123  | barista |
+| spv       | spv123      | spv     |
 
-| Peran   | Intent yang Diizinkan   |
-|---------|------------------------|
-| barista | AddItem, Checkout       |
-| spv     | Stock, Closing          |
-| owner   | ReadOnly                |
+## LocalDB
+
+- **Storage:** JSON file-based di folder `.homeai_db/`
+- **Files:** `transactions.json`, `stock.json`
+- **Cart:** In-memory, auto-merge item yang sama
+- **Transaction status:** `pending` -> `synced` / `failed`
+- **Offline-first:** Semua operasi simpan ke LocalDB dulu, sync ke ERP belakangan
+
+## Sync Engine
+
+- **Auto-sync:** Berjalan otomatis tiap 30 detik
+- **Manual sync:** Via voice command `"sync"` atau `"sinkron"`
+- **Retry:** Transaksi `failed` bisa di-sync ulang via `syncAll()`
+- **Status:** `getStatus()` menunjukkan pending count, failed count, sync state
+
+## Integrasi ERP
+
+`ERPClient` terhubung ke instance ERPNext:
+
+- **Sales Invoice:** `POST {baseUrl}/api/resource/Sales Invoice`
+- **Stock:** `GET {baseUrl}/api/resource/Bin`
+- **Health Check:** `GET {baseUrl}/api/method/frappe.auth.get_logged_user`
+- **Auth:** `Authorization: token {apiKey}:{apiSecret}`
+- **Env vars:** `ERP_BASE_URL`, `ERP_API_KEY`, `ERP_API_SECRET`
 
 ## Perintah Umum
 
@@ -82,11 +134,8 @@ Voice Input -> IntentParser -> Intent -> RoleGatekeeper -> IntentExecutor -> Int
 # Mengambil dependensi
 dart pub get
 
-# Menjalankan aplikasi
+# Menjalankan aplikasi (demo mode)
 dart run lib/main.dart
-
-# Menjalankan dari entry point bin (lama, ada masalah)
-dart run bin/homeai_voice.dart
 
 # Menganalisis kode
 dart analyze
@@ -94,34 +143,18 @@ dart analyze
 
 ## Konvensi
 
-- **Pencampuran bahasa:** Identifier dan struktur kode dalam bahasa Inggris. String yang ditampilkan ke pengguna dan beberapa komentar dalam bahasa Indonesia (contoh: "jual" = sell, "bayar" = pay, "Berhasil" = success, "AKSES_DITOLAK" = access denied).
+- **Bahasa kode:** Identifier dalam bahasa Inggris, string user-facing dalam bahasa Indonesia
 - **Gaya commit:** Conventional commits — `feat(scope):`, `refactor(scope):`, dll.
-- **Dependency injection:** DI berbasis constructor di seluruh kode (coordinator, executor, dll.).
-- **Penandaan error:** Error dilempar sebagai `Exception` dengan kode berprefix (contoh: `ERP_SALES_INVOICE_FAILED`).
-- **Belum ada test:** Belum ada direktori `test/` maupun dependensi testing.
-- **Belum ada konfigurasi linting:** Belum ada `analysis_options.yaml`.
-- **Belum ada .gitignore:** Belum ada file ignore.
-- **Belum ada file environment:** Kredensial ERP (`baseUrl`, `apiKey`, `apiSecret`) dikirim via constructor, tidak dimuat dari env.
+- **DI:** Constructor-based dependency injection di seluruh kode
+- **Error:** Exception dengan kode berprefix (contoh: `ERP_SALES_INVOICE_FAILED`)
+- **Offline-first:** Semua transaksi masuk LocalDB dulu, baru sync ke ERP
+- **Arsitektur:** Ports and Adapters (hexagonal) — IntentPort sebagai boundary
 
-## Integrasi ERP
+## Roadmap
 
-`ERPClient` terhubung ke instance ERPNext:
-
-- **Endpoint:** `POST {baseUrl}/api/resource/Sales Invoice`
-- **Auth:** `Authorization: token {apiKey}:{apiSecret}`
-- **Payload:** JSON dengan `customer`, `items[]` (item_code, qty), `payments[]` (mode_of_payment, amount)
-- **Customer:** Di-hardcode ke "Walk-in Customer"
-- **Harga:** Dihitung otomatis oleh ERP (amount: 0)
-
-## Keterbatasan / Utang Teknis
-
-- `IntentParser` menggunakan pencocokan kata kunci yang di-hardcode — belum ada NLP
-- Nama item ("kopi susu") dan kuantitas di-hardcode di parser
-- ID Intent berupa integer acak (0-999999), bukan UUID
-- `bin/homeai_voice.dart` memiliki kode di luar `main()` (baris 16-19)
-- `role_gatekeeper.dart` mereferensikan tipe (`AddItemIntent`, `StockIntent`, dll.) yang tidak ada di codebase — tidak bisa dikompilasi
-- `IntentExecutor` ada sebagai class konkret (`lib/intent/intent_executor.dart`) dan kontrak abstrak (`lib/intent/intent_contract.dart`) dengan signature yang berbeda
-- `VoiceCommandCoordinator` memanggil `parser.parseCommand()` tapi nama method-nya `parser.parse()`
-- `ERPClient` tidak mengimplementasi `IntentPort` tapi dikirim ke `IntentExecutor` yang mengharapkan `IntentPort`
-- Package `http` di-import tapi tidak dideklarasikan di dependensi `pubspec.yaml`
-- Nama file auth context memiliki spasi di akhir (`auth_context .dart`)
+- [ ] Upgrade parser ke LLM-based (conversational, bukan keyword matching)
+- [ ] Tambah test suite
+- [ ] Tambah `analysis_options.yaml` untuk linting
+- [ ] Migrasi LocalDB ke SQLite/Isar untuk performa
+- [ ] Smart upselling (AI suggest berdasarkan history)
+- [ ] Multi-modal input (voice + touch)

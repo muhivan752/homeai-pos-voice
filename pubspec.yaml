@@ -1,6 +1,11 @@
 name: homeai_voice
-description: Voice command PoC
-version: 0.0.1
+description: HomeAI POS Voice - AI-powered Point of Sale with voice interface
+version: 0.1.0
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  http: ^1.1.0
+  crypto: ^3.0.3
+  path: ^1.8.3
