@@ -28,6 +28,9 @@ class VoiceCommandCoordinator {
   AuthContext? get auth => _auth;
   bool get isLoggedIn => _auth != null;
 
+  void setAuth(AuthContext auth) => _auth = auth;
+  void logout() => _auth = null;
+
   Future<String> handleVoice(String rawText) async {
     final intent = parser.parse(rawText);
 

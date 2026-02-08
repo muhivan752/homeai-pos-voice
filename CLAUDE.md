@@ -9,10 +9,10 @@
 ## Tech Stack
 
 - **Bahasa:** Dart (SDK >=3.0.0 <4.0.0)
-- **Runtime:** Dart CLI
+- **Framework:** Flutter (mobile app)
 - **API Eksternal:** ERPNext/Frappe REST API (HTTP, token auth)
-- **Package manager:** `dart pub`
-- **Dependensi:** `http`, `crypto`, `path`
+- **Package manager:** `dart pub` / `flutter pub`
+- **Dependensi:** `http`, `crypto`, `path`, `path_provider`, `speech_to_text`
 
 ## Arsitektur 3 Layer
 
@@ -41,12 +41,13 @@ VoiceInput -> IntentParser -> Intent -> RoleGatekeeper -> IntentExecutor -> Loca
 
 ```
 lib/
-  main.dart                          # Entry point + demo simulasi voice commands
+  main.dart                          # Flutter entry point (MaterialApp)
   core/
-    auth_context.dart                # UserRole enum, AuthContext, AuthService (login + password)
+    auth_context.dart                # UserRole enum, AuthContext, AuthService (login + password SHA-256)
     voice_command_coordinator.dart   # Orkestrator utama: login -> parse -> validate -> execute -> save
     role_gatekeeper.dart             # allowIntent(role, intent) berbasis IntentType
     erp_client.dart                  # HTTP client ke ERPNext (sales invoice, stok, health check)
+    service_provider.dart            # Singleton service provider (inisialisasi semua service)
   intent/
     intent.dart                      # Data class Intent (id, type, payload, createdAt)
     intent_type.dart                 # IntentType enum (8 tipe)
@@ -61,9 +62,13 @@ lib/
   sync/
     sync_engine.dart                 # Auto-sync + manual sync ke ERP, status tracking
   ui/
-    post_screen.dart                 # Contoh integrasi UI (placeholder Flutter widget)
+    login_screen.dart                # Halaman login Flutter
+    pos_home_screen.dart             # Halaman utama POS (chat-style voice interface)
+    post_screen.dart                 # Re-export (backwards compat)
   voice/
     voice_input.dart                 # Handler input suara + callback respons
+bin/
+  demo.dart                          # CLI demo mode (tanpa Flutter)
 ```
 
 ## Intent Types
@@ -92,10 +97,10 @@ lib/
 
 - Password di-hash dengan SHA-256 (`package:crypto`)
 - Default admin: **username:** `admin`, **password:** `admin123`
-- Login via voice: `"login [username] [password]"`
+- Login via UI form atau voice: `"login [username] [password]"`
 - Semua perintah selain login butuh autentikasi
 
-### Default Users (di main.dart)
+### Default Users
 
 | Username  | Password    | Role    |
 |-----------|-------------|---------|
@@ -110,6 +115,7 @@ lib/
 - **Cart:** In-memory, auto-merge item yang sama
 - **Transaction status:** `pending` -> `synced` / `failed`
 - **Offline-first:** Semua operasi simpan ke LocalDB dulu, sync ke ERP belakangan
+- **Reset:** `LocalDB.reset()` untuk hapus semua data
 
 ## Sync Engine
 
@@ -132,20 +138,23 @@ lib/
 
 ```bash
 # Mengambil dependensi
-dart pub get
+flutter pub get
 
-# Menjalankan aplikasi (demo mode)
-dart run lib/main.dart
+# Menjalankan aplikasi Flutter
+flutter run
+
+# Menjalankan CLI demo (tanpa Flutter)
+dart run bin/demo.dart
 
 # Menganalisis kode
-dart analyze
+flutter analyze
 ```
 
 ## Konvensi
 
 - **Bahasa kode:** Identifier dalam bahasa Inggris, string user-facing dalam bahasa Indonesia
 - **Gaya commit:** Conventional commits — `feat(scope):`, `refactor(scope):`, dll.
-- **DI:** Constructor-based dependency injection di seluruh kode
+- **DI:** Constructor-based dependency injection + ServiceProvider singleton
 - **Error:** Exception dengan kode berprefix (contoh: `ERP_SALES_INVOICE_FAILED`)
 - **Offline-first:** Semua transaksi masuk LocalDB dulu, baru sync ke ERP
 - **Arsitektur:** Ports and Adapters (hexagonal) — IntentPort sebagai boundary
@@ -153,6 +162,8 @@ dart analyze
 ## Roadmap
 
 - [ ] Upgrade parser ke LLM-based (conversational, bukan keyword matching)
+- [x] Flutter UI (login + POS screen)
+- [ ] Speech-to-text integration
 - [ ] Tambah test suite
 - [ ] Tambah `analysis_options.yaml` untuk linting
 - [ ] Migrasi LocalDB ke SQLite/Isar untuk performa

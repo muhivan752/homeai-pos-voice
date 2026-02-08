@@ -66,6 +66,16 @@ class LocalDB {
     await _loadStock();
   }
 
+  Future<void> reset() async {
+    _transactions.clear();
+    _stock.clear();
+    _cart.clear();
+    final txFile = File(p.join(dbPath, 'transactions.json'));
+    final stockFile = File(p.join(dbPath, 'stock.json'));
+    if (await txFile.exists()) await txFile.delete();
+    if (await stockFile.exists()) await stockFile.delete();
+  }
+
   // --- Cart Operations ---
 
   void addToCart({required String item, required int qty}) {

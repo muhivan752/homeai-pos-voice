@@ -1,6 +1,31 @@
+# Dart/Flutter
 .dart_tool/
 .packages
 pubspec.lock
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# App data
 .homeai_db/
 *.db
 .env
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# macOS
+macos/Flutter/
