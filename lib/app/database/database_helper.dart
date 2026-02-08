@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -133,7 +133,7 @@ class DatabaseHelper {
     await db.insert('users', {
       'id': 'admin',
       'username': 'admin',
-      'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f', // admin123
+      'password_hash': '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', // admin123
       'name': 'Administrator',
       'role': 'admin',
       'is_active': 1,
@@ -200,7 +200,7 @@ class DatabaseHelper {
         await db.insert('users', {
           'id': 'admin',
           'username': 'admin',
-          'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f',
+          'password_hash': '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
           'name': 'Administrator',
           'role': 'admin',
           'is_active': 1,
@@ -217,12 +217,21 @@ class DatabaseHelper {
       } catch (_) {}
     }
 
-    // Version 3: Fix admin password hash
+    // Version 3: Fix admin password hash (had wrong hash, fixed again in v4)
     if (oldVersion < 3) {
-      // Update admin password hash to correct value for "admin123"
       await db.update(
         'users',
-        {'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f'},
+        {'password_hash': '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'},
+        where: 'username = ?',
+        whereArgs: ['admin'],
+      );
+    }
+
+    // Version 4: Fix admin password hash for users who got wrong hash from v3
+    if (oldVersion < 4) {
+      await db.update(
+        'users',
+        {'password_hash': '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'},
         where: 'username = ?',
         whereArgs: ['admin'],
       );
