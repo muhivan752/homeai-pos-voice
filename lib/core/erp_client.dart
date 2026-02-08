@@ -7,23 +7,27 @@ class ERPClient {
   final String apiSecret;
 
   ERPClient({
-    required this.baseUrl,
-    required this.apiKey,
-    required this.apiSecret,
+    this.baseUrl = '',
+    this.apiKey = '',
+    this.apiSecret = '',
   });
 
-  Map<String, String> get _headers => {
-        'Authorization': 'token $apiKey:$apiSecret',
-        'Content-Type': 'application/json',
-      };
-
-  // --- Sales Invoice ---
-
-  Future<void> createSalesInvoice({
+  Future<Map<String, dynamic>> createSalesInvoice({
     required String itemCode,
     required int qty,
-    String paymentMethod = 'Cash',
+    required double price,
   }) async {
+    if (baseUrl.isEmpty) {
+      // Mock response for demo
+      return {
+        'success': true,
+        'invoice_id': 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        'item_code': itemCode,
+        'qty': qty,
+        'total': price * qty,
+      };
+    }
+
     final url = Uri.parse('$baseUrl/api/resource/Sales Invoice');
 
     final payload = {
@@ -32,7 +36,10 @@ class ERPClient {
         {"item_code": itemCode, "qty": qty}
       ],
       "payments": [
-        {"mode_of_payment": paymentMethod, "amount": 0}
+        {
+          "mode_of_payment": "Cash",
+          "amount": price * qty,
+        }
       ]
     };
 
@@ -41,38 +48,37 @@ class ERPClient {
     if (res.statusCode != 200) {
       throw Exception('ERP_SALES_INVOICE_FAILED: ${res.statusCode} ${res.body}');
     }
+
+    return jsonDecode(res.body);
   }
 
-  // --- Stock ---
-
-  Future<Map<String, int>> getStock() async {
-    final url = Uri.parse('$baseUrl/api/resource/Bin?fields=["item_code","actual_qty"]&limit_page_length=100');
-
-    try {
-      final res = await http.get(url, headers: _headers);
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        final data = body['data'] as List<dynamic>? ?? [];
-        final stock = <String, int>{};
-        for (final item in data) {
-          stock[item['item_code'] as String] = (item['actual_qty'] as num).toInt();
-        }
-        return stock;
-      }
-    } catch (_) {}
-    return {};
-  }
-
-  // --- Connection Check ---
-
-  Future<bool> isOnline() async {
-    try {
-      final url = Uri.parse('$baseUrl/api/method/frappe.auth.get_logged_user');
-      final res = await http.get(url, headers: _headers)
-          .timeout(const Duration(seconds: 5));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
+  Future<List<Map<String, dynamic>>> getProducts() async {
+    if (baseUrl.isEmpty) {
+      // Mock products for demo
+      return [
+        {'item_code': 'kopi-susu', 'name': 'Kopi Susu', 'price': 18000},
+        {'item_code': 'es-teh', 'name': 'Es Teh', 'price': 8000},
+        {'item_code': 'americano', 'name': 'Americano', 'price': 22000},
+      ];
     }
+
+    final url = Uri.parse('$baseUrl/api/resource/Item');
+
+    final res = await http.get(
+      url,
+      headers: {
+        'Authorization': 'token $apiKey:$apiSecret',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception(
+        'ERP_GET_PRODUCTS_FAILED: ${res.statusCode} ${res.body}',
+      );
+    }
+
+    final data = jsonDecode(res.body);
+    return List<Map<String, dynamic>>.from(data['data'] ?? []);
   }
 }

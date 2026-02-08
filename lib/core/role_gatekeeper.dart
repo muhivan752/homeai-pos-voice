@@ -5,24 +5,17 @@ import '../intent/intent_type.dart';
 bool allowIntent(UserRole role, Intent intent) {
   switch (role) {
     case UserRole.barista:
-      return [
-        IntentType.sellItem,
-        IntentType.checkout,
-        IntentType.cancelItem,
-      ].contains(intent.type);
+      return intent.type == IntentType.sellItem ||
+          intent.type == IntentType.checkout;
 
-    case UserRole.spv:
-      return [
-        IntentType.sellItem,
-        IntentType.checkout,
-        IntentType.cancelItem,
-        IntentType.checkStock,
-        IntentType.dailyReport,
-        IntentType.syncManual,
-      ].contains(intent.type);
+    case UserRole.supervisor:
+      return intent.type == IntentType.sellItem ||
+          intent.type == IntentType.checkout;
 
     case UserRole.owner:
+      return intent.type == IntentType.checkout;
+
     case UserRole.admin:
-      return true; // Full access
+      return true;
   }
 }

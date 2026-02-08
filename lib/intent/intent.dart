@@ -11,8 +11,7 @@ class Intent {
     required this.id,
     required this.type,
     required this.payload,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+  });
 
   bool get isValid => type != IntentType.unknown;
 }

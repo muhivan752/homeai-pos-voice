@@ -1,19 +1,29 @@
-name: homeai_voice
-description: HomeAI POS Voice - AI-powered Point of Sale with voice interface
-version: 0.1.0
+name: homeai_pos_voice
+description: HomeAI POS Voice - Voice-enabled Point of Sale System
 publish_to: 'none'
+version: 1.0.0+1
 
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.1.0
-  crypto: ^3.0.3
-  path: ^1.8.3
-  path_provider: ^2.1.1
+  cupertino_icons: ^1.0.6
   speech_to_text: ^6.6.0
+  http: ^1.1.0
+  provider: ^6.1.1
+  shared_preferences: ^2.2.2
+  permission_handler: ^11.1.0
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  uuid: ^4.2.1
+  connectivity_plus: ^5.0.2
+  intl: ^0.18.1
+  share_plus: ^7.2.1
+  mobile_scanner: ^4.0.1
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

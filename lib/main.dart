@@ -1,36 +1,35 @@
 import 'package:flutter/material.dart';
-import 'ui/login_screen.dart';
+import 'package:provider/provider.dart';
+import 'app/pos_app.dart';
+import 'app/providers/cart_provider.dart';
+import 'app/providers/voice_provider.dart';
+import 'app/providers/product_provider.dart';
+import 'app/services/sync_service.dart';
+import 'app/services/erp_service.dart';
+import 'app/services/auth_service.dart';
 
-void main() {
-  runApp(const HomeAIPosApp());
-}
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-class HomeAIPosApp extends StatelessWidget {
-  const HomeAIPosApp({super.key});
+  // Initialize services
+  final erpService = ErpService();
+  final syncService = SyncService();
+  final authService = AuthService();
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'POS Voice',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2C5F7C),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ),
-      home: const LoginScreen(),
-    );
-  }
+  await erpService.init();
+  await syncService.init();
+  await authService.init();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => VoiceProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()..loadProducts()),
+        ChangeNotifierProvider.value(value: syncService),
+        ChangeNotifierProvider.value(value: authService),
+      ],
+      child: const PosApp(),
+    ),
+  );
 }

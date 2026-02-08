@@ -2,31 +2,31 @@ import '../intent/intent.dart';
 import '../intent/intent_type.dart';
 import '../intent/intent_parser.dart';
 import '../intent/intent_executor.dart';
-import '../intent/intent_payload.dart';
+import '../intent/intent.dart';
 import '../core/auth_context.dart';
 import '../core/role_gatekeeper.dart';
 import '../db/local_db.dart';
 import '../sync/sync_engine.dart';
+
+typedef VoiceCallback = void Function(String message, bool isSuccess);
 
 class VoiceCommandCoordinator {
   AuthContext? _auth;
   final AuthService authService;
   final IntentParser parser;
   final IntentExecutor executor;
-  final LocalDB db;
-  final SyncEngine syncEngine;
+  final VoiceCallback? onResult;
 
   VoiceCommandCoordinator({
     AuthContext? auth,
     required this.authService,
     required this.parser,
     required this.executor,
-    required this.db,
-    required this.syncEngine,
-  }) : _auth = auth;
+    this.onResult,
+  });
 
-  AuthContext? get auth => _auth;
-  bool get isLoggedIn => _auth != null;
+  Future<VoiceResult> handleVoice(String rawText) async {
+    final intent = parser.parse(rawText);
 
   void setAuth(AuthContext auth) => _auth = auth;
   void logout() => _auth = null;
@@ -46,11 +46,15 @@ class VoiceCommandCoordinator {
 
     // Cek hak akses
     if (!intent.isValid) {
-      return _respond(false, 'Perintah tidak dikenali: "$rawText"');
+      final message = 'Perintah tidak dikenali: "$rawText"';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
 
-    if (!allowIntent(_auth!.role, intent)) {
-      return _respond(false, 'AKSES_DITOLAK: ${_auth!.role.name} tidak bisa ${intent.type.name}');
+    if (!allowIntent(auth.role, intent)) {
+      const message = 'Akses ditolak untuk perintah ini';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
 
     // Handle sync manual
@@ -60,65 +64,26 @@ class VoiceCommandCoordinator {
 
     // Eksekusi intent
     try {
-      final result = await executor.execute(intent);
-
-      // Simpan transaksi ke LocalDB
-      if (_isTransactional(intent.type)) {
-        await db.addTransaction(
-          id: intent.id,
-          type: intent.type.name,
-          data: _intentToData(intent),
-        );
-      }
-
-      return _respond(true, result);
+      await executor.execute(intent);
+      final message = 'Berhasil: ${intent.type.name}';
+      onResult?.call(message, true);
+      return VoiceResult(success: true, message: message, intent: intent);
     } catch (e) {
-      return _respond(false, e.toString());
+      final message = 'Error: ${e.toString()}';
+      onResult?.call(message, false);
+      return VoiceResult(success: false, message: message);
     }
   }
+}
 
-  Future<String> _handleLogin(Intent intent) async {
-    final payload = intent.payload as LoginPayload;
-    final context = authService.login(payload.username, payload.password);
+class VoiceResult {
+  final bool success;
+  final String message;
+  final Intent? intent;
 
-    if (context == null) {
-      return _respond(false, 'Login gagal. Username atau password salah.');
-    }
-
-    _auth = context;
-    return _respond(true, 'Login berhasil! Selamat datang, ${context.username} (${context.role.name})');
-  }
-
-  Future<String> _handleSync() async {
-    final result = await syncEngine.syncAll();
-    return _respond(true, result.toString());
-  }
-
-  bool _isTransactional(IntentType type) {
-    return [IntentType.sellItem, IntentType.checkout, IntentType.cancelItem].contains(type);
-  }
-
-  Map<String, dynamic> _intentToData(Intent intent) {
-    final payload = intent.payload;
-    if (payload is SellItemPayload) {
-      return {'item': payload.item, 'qty': payload.qty};
-    }
-    if (payload is CheckoutPayload) {
-      return {
-        'paymentMethod': payload.paymentMethod,
-        'items': db.cart.toList(),
-      };
-    }
-    if (payload is CancelItemPayload) {
-      return {'item': payload.item};
-    }
-    return {};
-  }
-
-  String _respond(bool success, String message) {
-    final prefix = success ? '[OK]' : '[ERROR]';
-    final line = '$prefix $message';
-    print(line);
-    return line;
-  }
+  VoiceResult({
+    required this.success,
+    required this.message,
+    this.intent,
+  });
 }
