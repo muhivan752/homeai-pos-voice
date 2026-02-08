@@ -22,35 +22,40 @@ class CartProvider extends ChangeNotifier {
   double get total => _items.fold(0, (sum, item) => sum + item.total);
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
-  void addItem(dynamic productOrId, [String? name, double? price, int quantity = 1]) {
+  void addItem(dynamic productOrId, [dynamic nameOrQuantity, double? price, int quantity = 1]) {
     String id;
     String itemName;
     double itemPrice;
+    int itemQuantity = quantity;
 
     if (productOrId is Product) {
       id = productOrId.id;
       itemName = productOrId.name;
       itemPrice = productOrId.price;
+      // If second param is int, it's quantity (old API compatibility)
+      if (nameOrQuantity is int) {
+        itemQuantity = nameOrQuantity;
+      }
     } else {
       id = productOrId.toString();
-      itemName = name ?? 'Unknown';
+      itemName = nameOrQuantity?.toString() ?? 'Unknown';
       itemPrice = price ?? 0;
     }
 
     final existingIndex = _items.indexWhere((item) => item.id == id);
 
     if (existingIndex >= 0) {
-      _items[existingIndex].quantity += quantity;
+      _items[existingIndex].quantity += itemQuantity;
     } else {
       _items.add(CartItem(
         id: id,
         name: itemName,
         price: itemPrice,
-        quantity: quantity,
+        quantity: itemQuantity,
       ));
     }
 
-    _lastMessage = 'Ditambahkan: $itemName x$quantity';
+    _lastMessage = 'Ditambahkan: $itemName x$itemQuantity';
     _isSuccess = true;
     notifyListeners();
   }

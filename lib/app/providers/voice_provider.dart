@@ -136,8 +136,12 @@ class VoiceProvider extends ChangeNotifier {
         lowerText.contains('bayar') ||
         lowerText.contains('selesai') ||
         lowerText.contains('cek out')) {
-      final success = cartProvider.checkout();
-      return success ? 'Checkout berhasil!' : 'Keranjang kosong!';
+      if (cartProvider.itemCount > 0) {
+        cartProvider.checkout();
+        return 'Checkout berhasil!';
+      } else {
+        return 'Keranjang kosong!';
+      }
     }
 
     // Clear cart
