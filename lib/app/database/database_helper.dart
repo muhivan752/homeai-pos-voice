@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -215,6 +215,17 @@ class DatabaseHelper {
         await db.insert('categories', {'id': 'snack', 'name': 'Snack', 'icon': 'cookie', 'sort_order': 3});
         await db.insert('categories', {'id': 'other', 'name': 'Lainnya', 'icon': 'category', 'sort_order': 4});
       } catch (_) {}
+    }
+
+    // Version 3: Fix admin password hash
+    if (oldVersion < 3) {
+      // Update admin password hash to correct value for "admin123"
+      await db.update(
+        'users',
+        {'password_hash': '240be518fabd2724ddb6f04eeb9d5b5e428d73f83eedca2c56e17c6c8d0f49f3f'},
+        where: 'username = ?',
+        whereArgs: ['admin'],
+      );
     }
   }
 
