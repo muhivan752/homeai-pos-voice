@@ -25,6 +25,10 @@ class VoiceProvider extends ChangeNotifier {
   double _lastConfidence = 0.0;
   bool _hasIdLocale = false;
 
+  // For auto-stop: stored so _onStatus can auto-process
+  CartProvider? _activeCart;
+  bool _manualStop = false;
+
   VoiceStatus get status => _status;
   String get lastWords => _lastWords;
   String get statusMessage => _statusMessage;
@@ -55,14 +59,12 @@ class VoiceProvider extends ChangeNotifier {
       );
 
       if (_isAvailable) {
-        // Check if Indonesian locale is explicitly listed
         try {
           final locales = await _speech.locales();
           _hasIdLocale = locales.any(
             (l) => l.localeId.startsWith('id') || l.localeId.startsWith('in'),
           );
         } catch (_) {
-          // Some devices fail to list locales — that's fine, still allow voice
           _hasIdLocale = false;
         }
         _statusMessage = 'Siap! Tekan mic atau ketik perintah';
@@ -84,14 +86,39 @@ class VoiceProvider extends ChangeNotifier {
       _status = VoiceStatus.listening;
       _statusMessage = 'Dengerin nih...';
       notifyListeners();
+    } else if (status == 'done' || status == 'notListening') {
+      // Auto-stop: speech engine stopped on its own (user finished talking)
+      // Only auto-process if NOT manually stopped by button press
+      if (_status == VoiceStatus.listening && !_manualStop) {
+        debugPrint('[POS Voice] Auto-stopped by speech engine');
+        if (_lastWords.isNotEmpty && _activeCart != null) {
+          // Auto-process the captured text
+          _status = VoiceStatus.processing;
+          _statusMessage = 'Bentar ya...';
+          notifyListeners();
+          // Use Future.microtask to let speech engine finish cleanup
+          Future.microtask(() {
+            final text = _lastWords;
+            final cart = _activeCart;
+            _activeCart = null;
+            if (text.isNotEmpty && cart != null) {
+              processText(text, cart);
+            }
+          });
+        } else {
+          _status = VoiceStatus.idle;
+          _statusMessage = 'Gak kedengeran nih, coba lagi atau ketik aja!';
+          _activeCart = null;
+          notifyListeners();
+        }
+      }
     }
-    // Don't auto-set processing on 'done' — let VoiceButton handle
-    // the flow manually via stopListening() + processText().
-    // Auto-setting processing here caused race conditions.
   }
 
   void _onError(dynamic error) {
     _status = VoiceStatus.error;
+    _activeCart = null;
+    _manualStop = false;
 
     final msg = error.errorMsg?.toString() ?? '';
     if (msg.contains('error_no_match')) {
@@ -110,7 +137,8 @@ class VoiceProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> startListening() async {
+  /// Start listening. Pass cartProvider so auto-stop can process.
+  Future<void> startListening(CartProvider cartProvider) async {
     if (!_isAvailable) {
       await initialize();
     }
@@ -123,34 +151,35 @@ class VoiceProvider extends ChangeNotifier {
 
     _lastWords = '';
     _lastConfidence = 0.0;
+    _manualStop = false;
+    _activeCart = cartProvider;
     _status = VoiceStatus.listening;
-    _statusMessage = 'Dengerin nih... ngomong yang jelas ya!';
+    _statusMessage = 'Ngomong aja, gak perlu tekan stop...';
     notifyListeners();
 
-    // Try id_ID first, fall back to device default if not found
     final localeId = _hasIdLocale ? 'id_ID' : null;
 
     try {
       await _speech.listen(
         onResult: _onSpeechResult,
-        listenFor: const Duration(seconds: 10),
+        listenFor: const Duration(seconds: 15),
         pauseFor: const Duration(seconds: 3),
         localeId: localeId,
         cancelOnError: true,
         partialResults: true,
       );
     } catch (e) {
-      // If locale fails, retry without specifying locale
       try {
         await _speech.listen(
           onResult: _onSpeechResult,
-          listenFor: const Duration(seconds: 10),
+          listenFor: const Duration(seconds: 15),
           pauseFor: const Duration(seconds: 3),
           cancelOnError: true,
           partialResults: true,
         );
       } catch (_) {
         _status = VoiceStatus.error;
+        _activeCart = null;
         _statusMessage = 'Voice gagal start. Coba ketik aja!';
         notifyListeners();
       }
@@ -158,8 +187,6 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    // Only update if we got actual text — speech engine sometimes
-    // sends a final empty callback that would clear our captured text
     final words = result.recognizedWords.trim();
     if (words.isNotEmpty) {
       _lastWords = words;
@@ -169,10 +196,12 @@ class VoiceProvider extends ChangeNotifier {
     }
   }
 
+  /// Manual stop — called by VoiceButton when user presses stop.
   Future<void> stopListening() async {
+    _manualStop = true;
+    _activeCart = null;
     await _speech.stop();
     _status = VoiceStatus.idle;
-    _statusMessage = 'Tekan mic atau ketik perintah';
     notifyListeners();
   }
 
@@ -191,13 +220,10 @@ class VoiceProvider extends ChangeNotifier {
     try {
       debugPrint('[POS Voice] Processing: "$_lastWords" (confidence: $_lastConfidence)');
 
-      // Quality filter before processing
       final filterResult = _qualityCheck(_lastWords, _lastConfidence);
       if (filterResult != null) {
         debugPrint('[POS Voice] Quality filter rejected: $filterResult');
         _statusMessage = filterResult;
-        _status = VoiceStatus.idle;
-        notifyListeners();
         return;
       }
 
@@ -209,42 +235,35 @@ class VoiceProvider extends ChangeNotifier {
       debugPrint('[POS Voice] Stack: $stackTrace');
       _statusMessage = 'Waduh error nih. Coba lagi atau ketik aja!';
     } finally {
-      // ALWAYS reset to idle — never stay stuck on processing
       _status = VoiceStatus.idle;
       notifyListeners();
     }
   }
 
-  /// Check if voice result is good enough to process.
-  /// Returns error message if bad, null if OK.
   String? _qualityCheck(String text, double confidence) {
     final lower = text.toLowerCase().trim();
 
-    // Too short (likely noise)
     if (lower.length < 3) {
       return 'Terlalu pendek nih, coba ngomong lebih jelas ya!';
     }
 
-    // Single noise word
     if (_noiseWords.contains(lower)) {
       return 'Gak nangkep yang jelas, coba bilang lagi?';
     }
 
-    // Likely English (wrong language)
     if (_looksEnglish(lower)) {
-      return 'Kayaknya kedeteksi bahasa Inggris nih. '
-          'Coba pastiin bahasa Indonesia aktif di HP, atau ketik aja!';
+      return 'Kedeteksi bahasa Inggris nih. Coba buka Settings > '
+          'Google > Voice > Offline speech > download Indonesian. '
+          'Atau ketik aja dulu!';
     }
 
-    // Very low confidence (if reported)
     if (confidence > 0 && confidence < 0.3) {
       return 'Kurang jelas nih, bisa diulang? Atau ketik aja!';
     }
 
-    return null; // OK to process
+    return null;
   }
 
-  /// Heuristic: does the text look like English?
   bool _looksEnglish(String lower) {
     int englishHits = 0;
     for (final indicator in _englishIndicators) {
@@ -252,11 +271,9 @@ class VoiceProvider extends ChangeNotifier {
         englishHits++;
       }
     }
-    // If 2+ English words found, likely English
     return englishHits >= 2;
   }
 
-  /// Process voice input through BaristaParser + BaristaResponse.
   String _executeBarista(String text, CartProvider cartProvider) {
     debugPrint('[POS Voice] Parsing: "$text"');
     final result = _parser.parse(text);
@@ -317,14 +334,14 @@ class VoiceProvider extends ChangeNotifier {
     return response;
   }
 
-  /// Process a text command directly (for text input fallback).
+  /// Process a text command directly (for text input or auto-stop).
   String processText(String text, CartProvider cartProvider) {
     _lastWords = text;
     _status = VoiceStatus.processing;
     notifyListeners();
 
     try {
-      debugPrint('[POS Voice] Text input: "$text"');
+      debugPrint('[POS Voice] Processing text: "$text"');
       final result = _executeBarista(text, cartProvider);
       debugPrint('[POS Voice] Result: $result');
       _statusMessage = result;
@@ -344,6 +361,8 @@ class VoiceProvider extends ChangeNotifier {
     _lastWords = '';
     _status = VoiceStatus.idle;
     _statusMessage = 'Tekan mic atau ketik perintah';
+    _activeCart = null;
+    _manualStop = false;
     _parser.clearContext();
     notifyListeners();
   }
