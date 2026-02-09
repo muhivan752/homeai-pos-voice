@@ -205,9 +205,17 @@ class VoiceButton extends StatelessWidget {
                       ? null
                       : () async {
                           if (isListening) {
+                            // CRITICAL: capture text BEFORE stopping
+                            // speech.stop() can trigger a final empty callback
+                            // that clears _lastWords
+                            final capturedText = voice.lastWords;
                             await voice.stopListening();
-                            voice.processCommand(
-                                context.read<CartProvider>());
+                            if (capturedText.isNotEmpty) {
+                              voice.processText(
+                                capturedText,
+                                context.read<CartProvider>(),
+                              );
+                            }
                           } else {
                             await voice.startListening();
                           }

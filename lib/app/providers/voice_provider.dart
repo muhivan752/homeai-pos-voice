@@ -83,13 +83,11 @@ class VoiceProvider extends ChangeNotifier {
     if (status == 'listening') {
       _status = VoiceStatus.listening;
       _statusMessage = 'Dengerin nih...';
-    } else if (status == 'done' || status == 'notListening') {
-      if (_status == VoiceStatus.listening) {
-        _status = VoiceStatus.processing;
-        _statusMessage = 'Bentar ya...';
-      }
+      notifyListeners();
     }
-    notifyListeners();
+    // Don't auto-set processing on 'done' — let VoiceButton handle
+    // the flow manually via stopListening() + processText().
+    // Auto-setting processing here caused race conditions.
   }
 
   void _onError(dynamic error) {
@@ -160,9 +158,15 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    _lastWords = result.recognizedWords;
-    _lastConfidence = result.confidence;
-    notifyListeners();
+    // Only update if we got actual text — speech engine sometimes
+    // sends a final empty callback that would clear our captured text
+    final words = result.recognizedWords.trim();
+    if (words.isNotEmpty) {
+      _lastWords = words;
+      _lastConfidence = result.confidence;
+      debugPrint('[POS Voice] Heard: "$words" (confidence: ${result.confidence})');
+      notifyListeners();
+    }
   }
 
   Future<void> stopListening() async {
