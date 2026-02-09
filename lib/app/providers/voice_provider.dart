@@ -55,19 +55,19 @@ class VoiceProvider extends ChangeNotifier {
       );
 
       if (_isAvailable) {
-        // Check if Indonesian locale is available
-        final locales = await _speech.locales();
-        _hasIdLocale = locales.any(
-          (l) => l.localeId.startsWith('id'),
-        );
-
-        if (_hasIdLocale) {
-          _statusMessage = 'Siap! Tekan mic atau ketik perintah';
-        } else {
-          _statusMessage = 'Bahasa Indonesia belum terinstall di HP. Pakai ketik aja dulu ya!';
+        // Check if Indonesian locale is explicitly listed
+        try {
+          final locales = await _speech.locales();
+          _hasIdLocale = locales.any(
+            (l) => l.localeId.startsWith('id') || l.localeId.startsWith('in'),
+          );
+        } catch (_) {
+          // Some devices fail to list locales — that's fine, still allow voice
+          _hasIdLocale = false;
         }
+        _statusMessage = 'Siap! Tekan mic atau ketik perintah';
       } else {
-        _statusMessage = 'Speech recognition tidak tersedia. Pakai ketik aja!';
+        _statusMessage = 'Voice gak tersedia. Pakai ketik aja!';
       }
       notifyListeners();
       return _isAvailable;
@@ -123,26 +123,40 @@ class VoiceProvider extends ChangeNotifier {
       return;
     }
 
-    if (!_hasIdLocale) {
-      _statusMessage = 'Bahasa Indonesia belum ada di HP. Ketik aja dulu!';
-      notifyListeners();
-      return;
-    }
-
     _lastWords = '';
     _lastConfidence = 0.0;
     _status = VoiceStatus.listening;
     _statusMessage = 'Dengerin nih... ngomong yang jelas ya!';
     notifyListeners();
 
-    await _speech.listen(
-      onResult: _onSpeechResult,
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 3),
-      localeId: 'id_ID',
-      cancelOnError: true,
-      partialResults: true,
-    );
+    // Try id_ID first, fall back to device default if not found
+    final localeId = _hasIdLocale ? 'id_ID' : null;
+
+    try {
+      await _speech.listen(
+        onResult: _onSpeechResult,
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 3),
+        localeId: localeId,
+        cancelOnError: true,
+        partialResults: true,
+      );
+    } catch (e) {
+      // If locale fails, retry without specifying locale
+      try {
+        await _speech.listen(
+          onResult: _onSpeechResult,
+          listenFor: const Duration(seconds: 10),
+          pauseFor: const Duration(seconds: 3),
+          cancelOnError: true,
+          partialResults: true,
+        );
+      } catch (_) {
+        _status = VoiceStatus.error;
+        _statusMessage = 'Voice gagal start. Coba ketik aja!';
+        notifyListeners();
+      }
+    }
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
