@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import '../models/product.dart';
+import '../services/barista_parser.dart';
+import '../services/barista_response.dart';
 import 'cart_provider.dart';
 
 enum VoiceStatus {
@@ -13,6 +15,8 @@ enum VoiceStatus {
 
 class VoiceProvider extends ChangeNotifier {
   final SpeechToText _speech = SpeechToText();
+  final BaristaParser _parser = BaristaParser();
+  final BaristaResponse _responder = BaristaResponse();
 
   VoiceStatus _status = VoiceStatus.idle;
   String _lastWords = '';
@@ -50,11 +54,11 @@ class VoiceProvider extends ChangeNotifier {
   void _onStatus(String status) {
     if (status == 'listening') {
       _status = VoiceStatus.listening;
-      _statusMessage = 'Mendengarkan...';
+      _statusMessage = 'Dengerin nih...';
     } else if (status == 'done' || status == 'notListening') {
       if (_status == VoiceStatus.listening) {
         _status = VoiceStatus.processing;
-        _statusMessage = 'Memproses...';
+        _statusMessage = 'Bentar ya...';
       }
     }
     notifyListeners();
@@ -62,12 +66,12 @@ class VoiceProvider extends ChangeNotifier {
 
   void _onError(dynamic error) {
     _status = VoiceStatus.error;
-    _statusMessage = 'Error: ${error.errorMsg}';
+    _statusMessage = 'Waduh, error nih: ${error.errorMsg}';
     notifyListeners();
 
     Future.delayed(const Duration(seconds: 2), () {
       _status = VoiceStatus.idle;
-      _statusMessage = 'Tekan tombol mic untuk mulai';
+      _statusMessage = 'Coba lagi yuk, tekan mic-nya';
       notifyListeners();
     });
   }
@@ -84,7 +88,7 @@ class VoiceProvider extends ChangeNotifier {
 
     _lastWords = '';
     _status = VoiceStatus.listening;
-    _statusMessage = 'Mendengarkan...';
+    _statusMessage = 'Dengerin nih...';
     notifyListeners();
 
     await _speech.listen(
@@ -105,100 +109,102 @@ class VoiceProvider extends ChangeNotifier {
   Future<void> stopListening() async {
     await _speech.stop();
     _status = VoiceStatus.idle;
-    _statusMessage = 'Tekan tombol mic untuk mulai';
+    _statusMessage = 'Tekan mic kalau mau pesan lagi';
     notifyListeners();
   }
 
   void processCommand(CartProvider cartProvider) {
     if (_lastWords.isEmpty) {
-      _statusMessage = 'Tidak ada perintah terdeteksi';
+      _statusMessage = 'Gak kedengeran nih, coba lagi ya?';
       _status = VoiceStatus.idle;
       notifyListeners();
       return;
     }
 
     _status = VoiceStatus.processing;
-    _statusMessage = 'Memproses: "$_lastWords"';
+    _statusMessage = 'Bentar ya...';
     notifyListeners();
 
-    final result = _parseAndExecute(_lastWords, cartProvider);
+    final result = _executeBarista(_lastWords, cartProvider);
 
     _statusMessage = result;
     _status = VoiceStatus.idle;
     notifyListeners();
   }
 
-  String _parseAndExecute(String text, CartProvider cartProvider) {
-    final lowerText = text.toLowerCase().trim();
+  /// Process voice input through BaristaParser + BaristaResponse.
+  String _executeBarista(String text, CartProvider cartProvider) {
+    // Parse the command
+    final result = _parser.parse(text);
+    final isFirstItem = cartProvider.itemCount == 0;
 
-    // Checkout commands
-    if (lowerText.contains('checkout') ||
-        lowerText.contains('bayar') ||
-        lowerText.contains('selesai') ||
-        lowerText.contains('cek out')) {
-      if (cartProvider.itemCount > 0) {
-        cartProvider.checkout();
-        return 'Checkout berhasil!';
-      } else {
-        return 'Keranjang kosong!';
-      }
+    // Execute the intent
+    switch (result.intent) {
+      case BaristaIntent.addItem:
+        if (result.product != null) {
+          cartProvider.addItem(result.product!, result.quantity);
+          _parser.setLastProduct(result.product!);
+        }
+        break;
+
+      case BaristaIntent.removeItem:
+        if (result.product != null) {
+          // Find matching item in cart and remove it
+          final cartItems = cartProvider.items;
+          final match = cartItems.where(
+            (item) => item.id == result.product!.id,
+          );
+          if (match.isNotEmpty) {
+            cartProvider.removeItem(match.first.id);
+          }
+        }
+        break;
+
+      case BaristaIntent.checkout:
+        if (cartProvider.itemCount > 0) {
+          // If payment method detected, do full checkout
+          if (result.paymentMethod != null) {
+            cartProvider.checkoutWithPayment(
+              paymentMethod: result.paymentMethod!,
+            );
+          }
+          // Otherwise just signal — UI will show payment screen
+        }
+        break;
+
+      case BaristaIntent.clearCart:
+        cartProvider.clearCart();
+        _parser.clearContext();
+        break;
+
+      case BaristaIntent.greeting:
+      case BaristaIntent.thanks:
+      case BaristaIntent.askMenu:
+      case BaristaIntent.unknown:
+        // No cart action needed
+        break;
     }
 
-    // Clear cart
-    if (lowerText.contains('hapus semua') ||
-        lowerText.contains('kosongkan') ||
-        lowerText.contains('batal semua') ||
-        lowerText.contains('clear')) {
-      cartProvider.clearCart();
-      return 'Keranjang dikosongkan';
-    }
-
-    // Sell/Add item
-    if (lowerText.contains('jual') ||
-        lowerText.contains('tambah') ||
-        lowerText.contains('add') ||
-        lowerText.contains('pesan')) {
-      return _handleSellCommand(lowerText, cartProvider);
-    }
-
-    // Try direct product name
-    final product = Product.findByNameOrAlias(lowerText);
-    if (product != null) {
-      cartProvider.addItem(product, 1);
-      return 'Ditambahkan: ${product.name} x1';
-    }
-
-    return 'Perintah tidak dikenali: "$text"';
+    // Generate fun response
+    return _responder.respond(
+      result: result,
+      cartItemCount: cartProvider.itemCount,
+      cartTotal: cartProvider.total,
+      isFirstItem: isFirstItem,
+    );
   }
 
-  String _handleSellCommand(String text, CartProvider cartProvider) {
-    // Extract quantity
-    int quantity = 1;
-    final qtyMatch = RegExp(r'(\d+)').firstMatch(text);
-    if (qtyMatch != null) {
-      quantity = int.parse(qtyMatch.group(1)!);
-    }
-
-    // Remove command words and numbers to find product
-    String productQuery = text
-        .replaceAll(RegExp(r'jual|tambah|add|pesan'), '')
-        .replaceAll(RegExp(r'\d+'), '')
-        .trim();
-
-    final product = Product.findByNameOrAlias(productQuery);
-
-    if (product != null) {
-      cartProvider.addItem(product, quantity);
-      return 'Ditambahkan: ${product.name} x$quantity';
-    }
-
-    return 'Produk tidak ditemukan: "$productQuery"';
+  /// Process a text command directly (for testing or text input).
+  String processText(String text, CartProvider cartProvider) {
+    _lastWords = text;
+    return _executeBarista(text, cartProvider);
   }
 
   void reset() {
     _lastWords = '';
     _status = VoiceStatus.idle;
-    _statusMessage = 'Tekan tombol mic untuk mulai';
+    _statusMessage = 'Tekan mic kalau mau pesan';
+    _parser.clearContext();
     notifyListeners();
   }
 }
