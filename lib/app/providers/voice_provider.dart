@@ -184,19 +184,31 @@ class VoiceProvider extends ChangeNotifier {
     _statusMessage = 'Bentar ya...';
     notifyListeners();
 
-    // Quality filter before processing
-    final filterResult = _qualityCheck(_lastWords, _lastConfidence);
-    if (filterResult != null) {
-      _statusMessage = filterResult;
+    try {
+      debugPrint('[POS Voice] Processing: "$_lastWords" (confidence: $_lastConfidence)');
+
+      // Quality filter before processing
+      final filterResult = _qualityCheck(_lastWords, _lastConfidence);
+      if (filterResult != null) {
+        debugPrint('[POS Voice] Quality filter rejected: $filterResult');
+        _statusMessage = filterResult;
+        _status = VoiceStatus.idle;
+        notifyListeners();
+        return;
+      }
+
+      final result = _executeBarista(_lastWords, cartProvider);
+      debugPrint('[POS Voice] Result: $result');
+      _statusMessage = result;
+    } catch (e, stackTrace) {
+      debugPrint('[POS Voice] ERROR in processCommand: $e');
+      debugPrint('[POS Voice] Stack: $stackTrace');
+      _statusMessage = 'Waduh error nih. Coba lagi atau ketik aja!';
+    } finally {
+      // ALWAYS reset to idle — never stay stuck on processing
       _status = VoiceStatus.idle;
       notifyListeners();
-      return;
     }
-
-    final result = _executeBarista(_lastWords, cartProvider);
-    _statusMessage = result;
-    _status = VoiceStatus.idle;
-    notifyListeners();
   }
 
   /// Check if voice result is good enough to process.
@@ -242,12 +254,15 @@ class VoiceProvider extends ChangeNotifier {
 
   /// Process voice input through BaristaParser + BaristaResponse.
   String _executeBarista(String text, CartProvider cartProvider) {
+    debugPrint('[POS Voice] Parsing: "$text"');
     final result = _parser.parse(text);
+    debugPrint('[POS Voice] Intent: ${result.intent}, product: ${result.product?.name}, qty: ${result.quantity}');
     final isFirstItem = cartProvider.itemCount == 0;
 
     switch (result.intent) {
       case BaristaIntent.addItem:
         if (result.product != null) {
+          debugPrint('[POS Voice] Adding ${result.product!.name} x${result.quantity} to cart');
           cartProvider.addItem(result.product!, result.quantity);
           _parser.setLastProduct(result.product!);
         }
@@ -287,23 +302,38 @@ class VoiceProvider extends ChangeNotifier {
         break;
     }
 
-    return _responder.respond(
+    debugPrint('[POS Voice] Generating response...');
+    final response = _responder.respond(
       result: result,
       cartItemCount: cartProvider.itemCount,
       cartTotal: cartProvider.total,
       isFirstItem: isFirstItem,
     );
+    debugPrint('[POS Voice] Response: $response');
+    return response;
   }
 
   /// Process a text command directly (for text input fallback).
   String processText(String text, CartProvider cartProvider) {
     _lastWords = text;
+    _status = VoiceStatus.processing;
     notifyListeners();
 
-    final result = _executeBarista(text, cartProvider);
-    _statusMessage = result;
-    notifyListeners();
-    return result;
+    try {
+      debugPrint('[POS Voice] Text input: "$text"');
+      final result = _executeBarista(text, cartProvider);
+      debugPrint('[POS Voice] Result: $result');
+      _statusMessage = result;
+      return result;
+    } catch (e, stackTrace) {
+      debugPrint('[POS Voice] ERROR in processText: $e');
+      debugPrint('[POS Voice] Stack: $stackTrace');
+      _statusMessage = 'Waduh error nih. Coba lagi ya!';
+      return _statusMessage;
+    } finally {
+      _status = VoiceStatus.idle;
+      notifyListeners();
+    }
   }
 
   void reset() {
