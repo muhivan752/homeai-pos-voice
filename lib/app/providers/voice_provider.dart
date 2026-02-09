@@ -20,14 +20,32 @@ class VoiceProvider extends ChangeNotifier {
 
   VoiceStatus _status = VoiceStatus.idle;
   String _lastWords = '';
-  String _statusMessage = 'Tekan tombol mic untuk mulai';
+  String _statusMessage = 'Tekan mic atau ketik perintah';
   bool _isAvailable = false;
+  double _lastConfidence = 0.0;
+  bool _hasIdLocale = false;
 
   VoiceStatus get status => _status;
   String get lastWords => _lastWords;
   String get statusMessage => _statusMessage;
   bool get isListening => _status == VoiceStatus.listening;
   bool get isAvailable => _isAvailable;
+
+  /// Common English words that indicate wrong language detection.
+  static const _englishIndicators = [
+    'i ', 'you ', 'the ', 'is ', 'are ', 'was ', 'were ',
+    'have ', 'has ', 'had ', 'will ', 'would ', 'could ',
+    'should ', 'said ', 'what ', 'when ', 'where ', 'which ',
+    'that ', 'this ', 'with ', 'from ', 'they ', 'been ',
+    'call ', 'first ', 'who ', 'may ', 'its ', 'like ',
+    'him ', 'her ', 'make ', 'can ', "don't", "i'm ",
+  ];
+
+  /// Very short words that are likely noise, not real commands.
+  static const _noiseWords = [
+    'ya', 'ye', 'yo', 'ha', 'he', 'hi', 'ho', 'hu',
+    'ah', 'eh', 'oh', 'uh', 'ok', 'a', 'e', 'i', 'o', 'u',
+  ];
 
   Future<bool> initialize() async {
     try {
@@ -37,14 +55,24 @@ class VoiceProvider extends ChangeNotifier {
       );
 
       if (_isAvailable) {
-        _statusMessage = 'Siap menerima perintah suara';
+        // Check if Indonesian locale is available
+        final locales = await _speech.locales();
+        _hasIdLocale = locales.any(
+          (l) => l.localeId.startsWith('id'),
+        );
+
+        if (_hasIdLocale) {
+          _statusMessage = 'Siap! Tekan mic atau ketik perintah';
+        } else {
+          _statusMessage = 'Bahasa Indonesia belum terinstall di HP. Pakai ketik aja dulu ya!';
+        }
       } else {
-        _statusMessage = 'Speech recognition tidak tersedia';
+        _statusMessage = 'Speech recognition tidak tersedia. Pakai ketik aja!';
       }
       notifyListeners();
       return _isAvailable;
     } catch (e) {
-      _statusMessage = 'Error: ${e.toString()}';
+      _statusMessage = 'Voice error, pakai ketik aja ya!';
       _status = VoiceStatus.error;
       notifyListeners();
       return false;
@@ -66,12 +94,20 @@ class VoiceProvider extends ChangeNotifier {
 
   void _onError(dynamic error) {
     _status = VoiceStatus.error;
-    _statusMessage = 'Waduh, error nih: ${error.errorMsg}';
+
+    final msg = error.errorMsg?.toString() ?? '';
+    if (msg.contains('error_no_match')) {
+      _statusMessage = 'Gak kedengeran nih. Coba lagi atau ketik aja!';
+    } else if (msg.contains('error_speech_timeout')) {
+      _statusMessage = 'Kelamaan diem nih. Coba lagi?';
+    } else {
+      _statusMessage = 'Voice error, coba ketik aja ya!';
+    }
     notifyListeners();
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 3), () {
       _status = VoiceStatus.idle;
-      _statusMessage = 'Coba lagi yuk, tekan mic-nya';
+      _statusMessage = 'Tekan mic atau ketik perintah';
       notifyListeners();
     });
   }
@@ -82,13 +118,21 @@ class VoiceProvider extends ChangeNotifier {
     }
 
     if (!_isAvailable) {
-      _statusMessage = 'Speech recognition tidak tersedia';
+      _statusMessage = 'Voice gak tersedia, ketik aja ya!';
+      notifyListeners();
+      return;
+    }
+
+    if (!_hasIdLocale) {
+      _statusMessage = 'Bahasa Indonesia belum ada di HP. Ketik aja dulu!';
+      notifyListeners();
       return;
     }
 
     _lastWords = '';
+    _lastConfidence = 0.0;
     _status = VoiceStatus.listening;
-    _statusMessage = 'Dengerin nih...';
+    _statusMessage = 'Dengerin nih... ngomong yang jelas ya!';
     notifyListeners();
 
     await _speech.listen(
@@ -103,19 +147,20 @@ class VoiceProvider extends ChangeNotifier {
 
   void _onSpeechResult(SpeechRecognitionResult result) {
     _lastWords = result.recognizedWords;
+    _lastConfidence = result.confidence;
     notifyListeners();
   }
 
   Future<void> stopListening() async {
     await _speech.stop();
     _status = VoiceStatus.idle;
-    _statusMessage = 'Tekan mic kalau mau pesan lagi';
+    _statusMessage = 'Tekan mic atau ketik perintah';
     notifyListeners();
   }
 
   void processCommand(CartProvider cartProvider) {
     if (_lastWords.isEmpty) {
-      _statusMessage = 'Gak kedengeran nih, coba lagi ya?';
+      _statusMessage = 'Gak kedengeran nih, coba lagi atau ketik aja!';
       _status = VoiceStatus.idle;
       notifyListeners();
       return;
@@ -125,20 +170,67 @@ class VoiceProvider extends ChangeNotifier {
     _statusMessage = 'Bentar ya...';
     notifyListeners();
 
-    final result = _executeBarista(_lastWords, cartProvider);
+    // Quality filter before processing
+    final filterResult = _qualityCheck(_lastWords, _lastConfidence);
+    if (filterResult != null) {
+      _statusMessage = filterResult;
+      _status = VoiceStatus.idle;
+      notifyListeners();
+      return;
+    }
 
+    final result = _executeBarista(_lastWords, cartProvider);
     _statusMessage = result;
     _status = VoiceStatus.idle;
     notifyListeners();
   }
 
+  /// Check if voice result is good enough to process.
+  /// Returns error message if bad, null if OK.
+  String? _qualityCheck(String text, double confidence) {
+    final lower = text.toLowerCase().trim();
+
+    // Too short (likely noise)
+    if (lower.length < 3) {
+      return 'Terlalu pendek nih, coba ngomong lebih jelas ya!';
+    }
+
+    // Single noise word
+    if (_noiseWords.contains(lower)) {
+      return 'Gak nangkep yang jelas, coba bilang lagi?';
+    }
+
+    // Likely English (wrong language)
+    if (_looksEnglish(lower)) {
+      return 'Kayaknya kedeteksi bahasa Inggris nih. '
+          'Coba pastiin bahasa Indonesia aktif di HP, atau ketik aja!';
+    }
+
+    // Very low confidence (if reported)
+    if (confidence > 0 && confidence < 0.3) {
+      return 'Kurang jelas nih, bisa diulang? Atau ketik aja!';
+    }
+
+    return null; // OK to process
+  }
+
+  /// Heuristic: does the text look like English?
+  bool _looksEnglish(String lower) {
+    int englishHits = 0;
+    for (final indicator in _englishIndicators) {
+      if (lower.contains(indicator)) {
+        englishHits++;
+      }
+    }
+    // If 2+ English words found, likely English
+    return englishHits >= 2;
+  }
+
   /// Process voice input through BaristaParser + BaristaResponse.
   String _executeBarista(String text, CartProvider cartProvider) {
-    // Parse the command
     final result = _parser.parse(text);
     final isFirstItem = cartProvider.itemCount == 0;
 
-    // Execute the intent
     switch (result.intent) {
       case BaristaIntent.addItem:
         if (result.product != null) {
@@ -149,7 +241,6 @@ class VoiceProvider extends ChangeNotifier {
 
       case BaristaIntent.removeItem:
         if (result.product != null) {
-          // Find matching item in cart and remove it
           final cartItems = cartProvider.items;
           final match = cartItems.where(
             (item) => item.id == result.product!.id,
@@ -162,13 +253,11 @@ class VoiceProvider extends ChangeNotifier {
 
       case BaristaIntent.checkout:
         if (cartProvider.itemCount > 0) {
-          // If payment method detected, do full checkout
           if (result.paymentMethod != null) {
             cartProvider.checkoutWithPayment(
               paymentMethod: result.paymentMethod!,
             );
           }
-          // Otherwise just signal — UI will show payment screen
         }
         break;
 
@@ -181,11 +270,9 @@ class VoiceProvider extends ChangeNotifier {
       case BaristaIntent.thanks:
       case BaristaIntent.askMenu:
       case BaristaIntent.unknown:
-        // No cart action needed
         break;
     }
 
-    // Generate fun response
     return _responder.respond(
       result: result,
       cartItemCount: cartProvider.itemCount,
@@ -194,16 +281,21 @@ class VoiceProvider extends ChangeNotifier {
     );
   }
 
-  /// Process a text command directly (for testing or text input).
+  /// Process a text command directly (for text input fallback).
   String processText(String text, CartProvider cartProvider) {
     _lastWords = text;
-    return _executeBarista(text, cartProvider);
+    notifyListeners();
+
+    final result = _executeBarista(text, cartProvider);
+    _statusMessage = result;
+    notifyListeners();
+    return result;
   }
 
   void reset() {
     _lastWords = '';
     _status = VoiceStatus.idle;
-    _statusMessage = 'Tekan mic kalau mau pesan';
+    _statusMessage = 'Tekan mic atau ketik perintah';
     _parser.clearContext();
     notifyListeners();
   }
