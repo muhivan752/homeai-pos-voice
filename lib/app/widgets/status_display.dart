@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/voice_provider.dart';
 import '../providers/cart_provider.dart';
+import '../providers/customer_provider.dart';
 
 class StatusDisplay extends StatelessWidget {
   const StatusDisplay({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<VoiceProvider, CartProvider>(
-      builder: (context, voice, cart, _) {
+    return Consumer3<VoiceProvider, CartProvider, CustomerProvider>(
+      builder: (context, voice, cart, customer, _) {
         final isListening = voice.status == VoiceStatus.listening;
         final hasCartMessage = cart.lastMessage.isNotEmpty;
 
@@ -64,6 +65,36 @@ class StatusDisplay extends StatelessWidget {
                   ),
                 ),
               ),
+              // Show active customer name badge
+              if (customer.hasCustomer) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.person,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.onTertiaryContainer,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        customer.customerName!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               if (isListening)
                 Container(
                   width: 12,

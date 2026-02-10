@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/voice_provider.dart';
 import '../providers/cart_provider.dart';
+import '../providers/customer_provider.dart';
 
 class VoiceButton extends StatelessWidget {
   const VoiceButton({super.key});
@@ -10,6 +11,7 @@ class VoiceButton extends StatelessWidget {
     final controller = TextEditingController();
     final voice = context.read<VoiceProvider>();
     final cart = context.read<CartProvider>();
+    final customer = context.read<CustomerProvider>();
 
     showModalBottomSheet(
       context: context,
@@ -53,7 +55,7 @@ class VoiceButton extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Misal: "kopi susu 2", "bayar qris", "batal latte"',
+                'Misal: "kopi susu 2", "gw Andi", "yang biasa"',
                 style: TextStyle(
                   fontSize: 13,
                   color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -84,7 +86,7 @@ class VoiceButton extends StatelessWidget {
                       ),
                       onSubmitted: (text) {
                         if (text.trim().isNotEmpty) {
-                          voice.processText(text.trim(), cart);
+                          voice.processText(text.trim(), cart, customerProvider: customer);
                           Navigator.pop(ctx);
                         }
                       },
@@ -100,7 +102,7 @@ class VoiceButton extends StatelessWidget {
                       onPressed: () {
                         final text = controller.text.trim();
                         if (text.isNotEmpty) {
-                          voice.processText(text, cart);
+                          voice.processText(text, cart, customerProvider: customer);
                           Navigator.pop(ctx);
                         }
                       },
@@ -117,28 +119,28 @@ class VoiceButton extends StatelessWidget {
                   _QuickChip(
                     label: 'Kopi Susu',
                     onTap: () {
-                      voice.processText('kopi susu', cart);
+                      voice.processText('kopi susu', cart, customerProvider: customer);
                       Navigator.pop(ctx);
                     },
                   ),
                   _QuickChip(
                     label: 'Latte',
                     onTap: () {
-                      voice.processText('latte', cart);
+                      voice.processText('latte', cart, customerProvider: customer);
                       Navigator.pop(ctx);
                     },
                   ),
                   _QuickChip(
                     label: 'Americano',
                     onTap: () {
-                      voice.processText('americano', cart);
+                      voice.processText('americano', cart, customerProvider: customer);
                       Navigator.pop(ctx);
                     },
                   ),
                   _QuickChip(
                     label: 'Bayar',
                     onTap: () {
-                      voice.processText('bayar', cart);
+                      voice.processText('bayar', cart, customerProvider: customer);
                       Navigator.pop(ctx);
                     },
                   ),
@@ -205,16 +207,17 @@ class VoiceButton extends StatelessWidget {
                       ? null
                       : () async {
                           final cart = context.read<CartProvider>();
+                          final customer = context.read<CustomerProvider>();
                           if (isListening) {
                             // Manual stop: capture text BEFORE stopping
                             final capturedText = voice.lastWords;
                             await voice.stopListening();
                             if (capturedText.isNotEmpty) {
-                              voice.processText(capturedText, cart);
+                              voice.processText(capturedText, cart, customerProvider: customer);
                             }
                           } else {
-                            // Start listening — pass cart for auto-stop
-                            await voice.startListening(cart);
+                            // Start listening — pass cart + customer for auto-stop
+                            await voice.startListening(cart, customerProvider: customer);
                           }
                         },
                   backgroundColor: isListening

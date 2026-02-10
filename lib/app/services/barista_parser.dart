@@ -10,6 +10,8 @@ enum BaristaIntent {
   greeting,
   thanks,
   askMenu,
+  identifyCustomer,
+  orderBiasa,
   unknown,
 }
 
@@ -21,6 +23,7 @@ class ParseResult {
   final String rawText;
   final double confidence;
   final String? paymentMethod;
+  final String? customerName;
 
   const ParseResult({
     required this.intent,
@@ -29,6 +32,7 @@ class ParseResult {
     this.rawText = '',
     this.confidence = 1.0,
     this.paymentMethod,
+    this.customerName,
   });
 }
 
@@ -114,6 +118,22 @@ class BaristaParser {
     'yang sama', 'sama lagi', 'repeat',
   ];
 
+  /// Keywords that signal customer identification.
+  static const List<String> _customerKeywords = [
+    'nama saya', 'nama gw', 'nama gue', 'nama aku',
+    'gw ', 'gue ', 'saya ', 'aku ',
+    'ini ', 'pelanggan ', 'customer ',
+    'atas nama',
+  ];
+
+  /// Keywords that signal "yang biasa" / regular order.
+  static const List<String> _biasaKeywords = [
+    'yang biasa', 'yg biasa', 'biasa', 'seperti biasa',
+    'kayak biasa', 'kaya biasa', 'the usual',
+    'pesanan biasa', 'order biasa', 'yang kemarin',
+    'yg kemarin', 'yang tadi', 'yang sering',
+  ];
+
   /// Payment method detection
   static const Map<String, String> _paymentKeywords = {
     'qris': 'QRIS',
@@ -169,7 +189,20 @@ class BaristaParser {
       );
     }
 
-    // 2. Check thanks
+    // 2. Check "yang biasa" (before product matching)
+    if (_matchesAny(lower, _biasaKeywords)) {
+      return ParseResult(
+        intent: BaristaIntent.orderBiasa,
+        rawText: raw,
+        confidence: 0.95,
+      );
+    }
+
+    // 3. Check customer identification ("gw Andi", "nama saya Budi")
+    final customerResult = _parseCustomerIdentity(lower, raw);
+    if (customerResult != null) return customerResult;
+
+    // 4. Check thanks
     if (_matchesAny(lower, _thanksKeywords)) {
       return ParseResult(
         intent: BaristaIntent.thanks,
@@ -178,7 +211,7 @@ class BaristaParser {
       );
     }
 
-    // 3. Check menu inquiry
+    // 5. Check menu inquiry
     if (_matchesAny(lower, _menuKeywords)) {
       return ParseResult(
         intent: BaristaIntent.askMenu,
@@ -187,7 +220,7 @@ class BaristaParser {
       );
     }
 
-    // 4. Check clear cart (before checkout, since "batal semua" > "batal")
+    // 6. Check clear cart (before checkout, since "batal semua" > "batal")
     if (_matchesAny(lower, _clearKeywords)) {
       return ParseResult(
         intent: BaristaIntent.clearCart,
@@ -196,15 +229,15 @@ class BaristaParser {
       );
     }
 
-    // 5. Check checkout
+    // 7. Check checkout
     final checkoutResult = _parseCheckout(lower, raw);
     if (checkoutResult != null) return checkoutResult;
 
-    // 6. Check remove item
+    // 8. Check remove item
     final removeResult = _parseRemove(lower, raw, products);
     if (removeResult != null) return removeResult;
 
-    // 7. Check "lagi" / repeat last
+    // 9. Check "lagi" / repeat last
     if (_lastProduct != null && _matchesAny(lower, _repeatKeywords)) {
       final qty = _extractQuantity(lower);
       return ParseResult(
@@ -216,15 +249,15 @@ class BaristaParser {
       );
     }
 
-    // 8. Check add item (with keywords)
+    // 10. Check add item (with keywords)
     final addResult = _parseAddItem(lower, raw, products);
     if (addResult != null) return addResult;
 
-    // 9. Try direct product match (no keyword needed)
+    // 11. Try direct product match (no keyword needed)
     final directResult = _parseDirectProduct(lower, raw, products);
     if (directResult != null) return directResult;
 
-    // 10. Unknown
+    // 12. Unknown
     return ParseResult(
       intent: BaristaIntent.unknown,
       rawText: raw,
@@ -242,6 +275,47 @@ class BaristaParser {
   }
 
   // --- Private parsing methods ---
+
+  /// Parse customer identity from text.
+  /// Patterns: "gw Andi", "nama saya Budi", "atas nama Sarah", "pelanggan Andi"
+  ParseResult? _parseCustomerIdentity(String lower, String raw) {
+    // Check each keyword pattern
+    for (final kw in _customerKeywords) {
+      if (!lower.contains(kw)) continue;
+
+      // Extract the name after the keyword
+      final idx = lower.indexOf(kw) + kw.length;
+      var name = lower.substring(idx).trim();
+
+      // Strip modifiers from name
+      for (final mod in _modifiers) {
+        name = name.replaceAll(RegExp('\\b$mod\\b'), '').trim();
+      }
+      for (final filler in _fillerWords) {
+        name = name.replaceAll(RegExp('\\b$filler\\b'), '').trim();
+      }
+
+      // Clean up and capitalize
+      name = name.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      if (name.isNotEmpty && name.length >= 2) {
+        // Capitalize first letter of each word
+        final capitalized = name.split(' ').map((w) {
+          if (w.isEmpty) return w;
+          return w[0].toUpperCase() + w.substring(1).toLowerCase();
+        }).join(' ');
+
+        return ParseResult(
+          intent: BaristaIntent.identifyCustomer,
+          rawText: raw,
+          customerName: capitalized,
+          confidence: 0.9,
+        );
+      }
+    }
+
+    return null;
+  }
 
   ParseResult? _parseCheckout(String lower, String raw) {
     if (!_matchesAny(lower, _checkoutKeywords)) return null;

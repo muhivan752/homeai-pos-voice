@@ -113,6 +113,7 @@ class CartProvider extends ChangeNotifier {
     String? cashierId,
     String? cashierName,
     String? customerName,
+    String? customerId,
   }) async {
     if (_items.isEmpty) {
       _lastMessage = 'Keranjang kosong!';
@@ -138,6 +139,7 @@ class CartProvider extends ChangeNotifier {
         'change_amount': changeAmount ?? 0,
         'payment_reference': paymentReference,
         'customer_name': customerName ?? 'Walk-in Customer',
+        'customer_id': customerId,
         'cashier_id': cashierId,
         'cashier_name': cashierName,
         'status': 'completed',

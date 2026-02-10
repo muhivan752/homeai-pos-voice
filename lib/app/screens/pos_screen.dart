@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/voice_provider.dart';
 import '../providers/product_provider.dart';
+import '../providers/customer_provider.dart';
 import '../services/erp_service.dart';
 import '../services/sync_service.dart';
 import '../services/auth_service.dart';
@@ -381,6 +382,9 @@ class _PosScreenState extends State<PosScreen> {
               ),
             );
 
+            // Get customer info if available
+            final customerProv = context.read<CustomerProvider>();
+
             // Process checkout with payment details
             final transactionId = await cart.checkoutWithPayment(
               paymentMethod: result.method,
@@ -389,7 +393,14 @@ class _PosScreenState extends State<PosScreen> {
               paymentReference: result.reference,
               cashierId: authService.currentUserId,
               cashierName: authService.currentUserName,
+              customerName: customerProv.customerName,
+              customerId: customerProv.activeCustomer?.id,
             );
+
+            // Record customer visit
+            if (transactionId != null && customerProv.hasCustomer) {
+              await customerProv.recordVisit(transactionId);
+            }
 
             if (transactionId != null) {
               ScaffoldMessenger.of(context).hideCurrentSnackBar();

@@ -1,11 +1,14 @@
 import 'dart:math';
 import 'barista_parser.dart';
 import '../models/product.dart';
+import '../models/customer.dart';
 
 /// Generates fun, natural barista-style responses in Indonesian.
 ///
 /// Designed to feel like chatting with a friendly barista,
 /// not a robot. Responses are randomized for variety.
+/// Now with customer awareness — personalized greetings and
+/// "yang biasa" recognition.
 class BaristaResponse {
   final _random = Random();
 
@@ -28,42 +31,49 @@ class BaristaResponse {
     required int cartItemCount,
     required double cartTotal,
     bool isFirstItem = false,
+    Customer? activeCustomer,
+    FavoriteItem? yangBiasa,
   }) {
     switch (result.intent) {
       case BaristaIntent.addItem:
-        return _addItemResponse(result, cartItemCount, cartTotal);
+        return _addItemResponse(result, cartItemCount, cartTotal, activeCustomer);
       case BaristaIntent.removeItem:
         return _removeItemResponse(result, cartItemCount);
       case BaristaIntent.checkout:
-        return _checkoutResponse(result, cartItemCount, cartTotal);
+        return _checkoutResponse(result, cartItemCount, cartTotal, activeCustomer);
       case BaristaIntent.clearCart:
         return _clearCartResponse(cartItemCount);
       case BaristaIntent.greeting:
-        return _greetingResponse();
+        return _greetingResponse(activeCustomer, yangBiasa);
       case BaristaIntent.thanks:
-        return _thanksResponse();
+        return _thanksResponse(activeCustomer);
       case BaristaIntent.askMenu:
         return _menuResponse();
+      case BaristaIntent.identifyCustomer:
+        return _identifyCustomerResponse(result, activeCustomer, yangBiasa);
+      case BaristaIntent.orderBiasa:
+        return _orderBiasaResponse(activeCustomer, yangBiasa);
       case BaristaIntent.unknown:
         return _unknownResponse(result.rawText);
     }
   }
 
   /// Response when item is added to cart
-  String _addItemResponse(ParseResult result, int cartCount, double cartTotal) {
+  String _addItemResponse(ParseResult result, int cartCount, double cartTotal, Customer? customer) {
     final product = result.product;
     if (product == null) return _productNotFoundResponse(result.rawText);
 
     final name = product.name;
     final qty = result.quantity;
     final qtyStr = qty > 1 ? ' $qty' : '';
+    final nameSuffix = customer != null ? ', ${customer.name.split(' ').first}' : '';
 
     // First item in cart
     if (cartCount == 0) {
       return _pick([
-        'Siap,$qtyStr $name masuk! Ada lagi?',
+        'Siap,$qtyStr $name masuk! Ada lagi$nameSuffix?',
         'Oke$qtyStr $name ya! Mau tambah apa lagi?',
-        '$name$qtyStr, noted! Ada yang lain?',
+        '$name$qtyStr, noted! Ada yang lain$nameSuffix?',
         'Sipp,$qtyStr $name! Mau sekalian yang lain?',
       ]);
     }
@@ -71,9 +81,9 @@ class BaristaResponse {
     // Subsequent items
     final total = _formatCurrency(cartTotal);
     return _pick([
-      'Plus$qtyStr $name ya! Totalnya Rp $total. Lanjut?',
+      'Plus$qtyStr $name ya! Totalnya Rp $total. Lanjut$nameSuffix?',
       'Oke$qtyStr $name ditambah! Sejauh ini Rp $total. Ada lagi?',
-      '$name$qtyStr masuk! Running total Rp $total. Yang lain?',
+      '$name$qtyStr masuk! Running total Rp $total. Yang lain$nameSuffix?',
       'Siap,$qtyStr $name! Total sementara Rp $total. Apa lagi?',
     ]);
   }
@@ -103,7 +113,7 @@ class BaristaResponse {
   }
 
   /// Response for checkout
-  String _checkoutResponse(ParseResult result, int cartCount, double cartTotal) {
+  String _checkoutResponse(ParseResult result, int cartCount, double cartTotal, Customer? customer) {
     if (cartCount == 0) {
       return _pick([
         'Eh, keranjangnya masih kosong nih. Mau pesan apa dulu?',
@@ -114,17 +124,18 @@ class BaristaResponse {
 
     final total = _formatCurrency(cartTotal);
     final payment = result.paymentMethod;
+    final thankName = customer != null ? ' ${customer.name.split(' ').first}' : '';
 
     if (payment != null) {
       return _pick([
-        'Oke totalnya Rp $total, bayar pake $payment ya! Siap!',
-        'Total Rp $total, $payment ya. Ditunggu!',
-        'Rp $total pake $payment, noted! Makasih ya!',
+        'Oke totalnya Rp $total, bayar pake $payment ya! Makasih$thankName!',
+        'Total Rp $total, $payment ya. Ditunggu$thankName!',
+        'Rp $total pake $payment, noted! Terima kasih$thankName!',
       ]);
     }
 
     return _pick([
-      'Totalnya Rp $total ya! Mau bayar pake apa?',
+      'Totalnya Rp $total ya! Mau bayar pake apa$thankName?',
       'Oke, total Rp $total. Cash, QRIS, atau transfer?',
       'Siap! Totalnya Rp $total. Bayarnya gimana nih?',
     ]);
@@ -146,8 +157,8 @@ class BaristaResponse {
     ]);
   }
 
-  /// Response for greetings
-  String _greetingResponse() {
+  /// Response for greetings — personalized if customer is known.
+  String _greetingResponse(Customer? customer, FavoriteItem? biasa) {
     final hour = DateTime.now().hour;
     String greeting;
     if (hour < 11) {
@@ -160,6 +171,28 @@ class BaristaResponse {
       greeting = 'Malam';
     }
 
+    // Personalized greeting for known customer
+    if (customer != null) {
+      final firstName = customer.name.split(' ').first;
+
+      if (biasa != null) {
+        return _pick([
+          'Hai $firstName! Selamat $greeting! Yang biasa, ${biasa.productName}?',
+          'Eh $firstName! $greeting! ${biasa.productName} lagi nih?',
+          'Wah $firstName dateng! $greeting! Mau ${biasa.productName} kayak biasa?',
+        ]);
+      }
+
+      if (customer.visitCount > 0) {
+        return _pick([
+          'Hai $firstName! Selamat $greeting! Seneng liat lo lagi!',
+          'Eh $firstName! $greeting! Mau pesan apa hari ini?',
+          'Wah $firstName! Dateng lagi nih! Mau apa kali ini?',
+        ]);
+      }
+    }
+
+    // Generic greeting
     return _pick([
       'Hai! Selamat $greeting! Mau pesan apa hari ini?',
       'Halo! Selamat $greeting! Ada yang bisa dibantu?',
@@ -168,13 +201,21 @@ class BaristaResponse {
     ]);
   }
 
-  /// Response for thanks
-  String _thanksResponse() {
+  /// Response for thanks — personalized
+  String _thanksResponse(Customer? customer) {
+    if (customer != null) {
+      final firstName = customer.name.split(' ').first;
+      return _pick([
+        'Sama-sama $firstName! Ditunggu lagi ya!',
+        'Makasih juga $firstName! Sampai ketemu lagi!',
+        'Siap $firstName! Semoga harinya menyenangkan!',
+      ]);
+    }
+
     return _pick([
       'Sama-sama! Dateng lagi ya!',
       'Makasih juga! Semoga harinya menyenangkan!',
       'Siap! Ditunggu next order-nya ya!',
-      'Thank you! See you next time!',
     ]);
   }
 
@@ -184,6 +225,66 @@ class BaristaResponse {
       'Kita punya kopi, teh, makanan, dan snack! Mau coba yang mana?',
       'Ada Kopi Susu, Americano, Latte, Cappuccino, Es Teh, Roti Bakar, dan lainnya! Mau apa?',
       'Menu favorit: Kopi Susu 18rb, Latte 25rb, Americano 22rb. Mau yang mana?',
+    ]);
+  }
+
+  /// Response when customer identifies themselves.
+  String _identifyCustomerResponse(ParseResult result, Customer? customer, FavoriteItem? biasa) {
+    final name = result.customerName ?? '';
+
+    // Returning customer recognized!
+    if (customer != null) {
+      final firstName = customer.name.split(' ').first;
+
+      if (biasa != null) {
+        return _pick([
+          'Eh $firstName! Udah lama gak mampir! Yang biasa, ${biasa.productName}?',
+          'Halo $firstName! Gw inget lo! ${biasa.productName} lagi?',
+          'Wah $firstName balik lagi! Mau ${biasa.productName} kayak biasa?',
+        ]);
+      }
+
+      return _pick([
+        'Halo $firstName! Seneng ketemu lagi! Mau pesan apa hari ini?',
+        'Eh $firstName! Welcome back! Mau apa nih?',
+        'Wah $firstName! Apa kabar? Mau order apa?',
+      ]);
+    }
+
+    // New customer — we'll remember them
+    return _pick([
+      'Hai $name! Salam kenal ya! Gw inget lo mulai sekarang. Mau pesan apa?',
+      'Halo $name! Welcome! Gw catat ya, next time tinggal sebut nama aja. Mau apa?',
+      'Salam kenal $name! Gw bakal inget pesanan lo. Mau order apa hari ini?',
+    ]);
+  }
+
+  /// Response when customer says "yang biasa".
+  String _orderBiasaResponse(Customer? customer, FavoriteItem? biasa) {
+    if (customer == null) {
+      return _pick([
+        'Hmm, gw belum kenal nih. Coba sebut nama dulu ya!',
+        'Yang biasa siapa nih? Sebut nama dulu dong!',
+        'Gw belum tau pesanan biasa kamu. Kasih tau nama dulu ya!',
+      ]);
+    }
+
+    final firstName = customer.name.split(' ').first;
+
+    if (biasa == null) {
+      return _pick([
+        'Hmm $firstName, gw belum hafal pesanan biasa lo nih. Pesan apa dulu?',
+        '$firstName, ini kayaknya baru pertama ya? Mau pesan apa?',
+        'Belum ada catatan pesanan biasa buat $firstName. Mau order apa?',
+      ]);
+    }
+
+    // This response is shown BEFORE the item is added to cart.
+    // The actual adding happens in VoiceProvider.
+    return _pick([
+      'Siap ${biasa.productName} kayak biasa ya $firstName!',
+      '${biasa.productName} buat $firstName, coming right up!',
+      'Oke $firstName, ${biasa.productName}! Gw udah hafal!',
     ]);
   }
 

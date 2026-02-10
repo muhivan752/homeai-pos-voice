@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -79,6 +79,7 @@ class DatabaseHelper {
         change_amount REAL DEFAULT 0,
         payment_reference TEXT,
         customer_name TEXT,
+        customer_id TEXT,
         cashier_id TEXT,
         cashier_name TEXT,
         status TEXT DEFAULT 'completed',
@@ -87,7 +88,8 @@ class DatabaseHelper {
         sync_error TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         synced_at TEXT,
-        FOREIGN KEY (cashier_id) REFERENCES users(id)
+        FOREIGN KEY (cashier_id) REFERENCES users(id),
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
       )
     ''');
 
@@ -121,6 +123,18 @@ class DatabaseHelper {
       )
     ''');
 
+    // Customers table — "POS yang kenal pelanggan"
+    await db.execute('''
+      CREATE TABLE customers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT,
+        visit_count INTEGER DEFAULT 0,
+        last_visit_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
     // Create indexes
     await db.execute('CREATE INDEX idx_transactions_sync ON transactions(sync_status)');
     await db.execute('CREATE INDEX idx_sync_queue_status ON sync_queue(status)');
@@ -128,6 +142,9 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
     await db.execute('CREATE INDEX idx_products_category ON products(category)');
     await db.execute('CREATE INDEX idx_users_username ON users(username)');
+    await db.execute('CREATE INDEX idx_customers_name ON customers(name)');
+    await db.execute('CREATE INDEX idx_customers_phone ON customers(phone)');
+    await db.execute('CREATE INDEX idx_transactions_customer ON transactions(customer_id)');
 
     // Insert default admin user (password: admin123)
     await db.insert('users', {
@@ -235,6 +252,30 @@ class DatabaseHelper {
         where: 'username = ?',
         whereArgs: ['admin'],
       );
+    }
+
+    // Version 5: Customer memory system — "POS yang kenal pelanggan"
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS customers (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          phone TEXT,
+          visit_count INTEGER DEFAULT 0,
+          last_visit_at TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN customer_id TEXT');
+      } catch (_) {}
+
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)');
+      } catch (_) {}
     }
   }
 
@@ -512,6 +553,88 @@ class DatabaseHelper {
     ''', [today]);
 
     return result.first;
+  }
+
+  // ============ CUSTOMERS ============
+
+  Future<int> insertCustomer(Map<String, dynamic> customer) async {
+    final db = await database;
+    return await db.insert(
+      'customers',
+      customer,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getCustomerById(String id) async {
+    final db = await database;
+    final results = await db.query('customers', where: 'id = ?', whereArgs: [id]);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Find customer by name (case-insensitive, fuzzy).
+  Future<List<Map<String, dynamic>>> findCustomersByName(String name) async {
+    final db = await database;
+    final lower = name.toLowerCase();
+    return await db.rawQuery('''
+      SELECT * FROM customers
+      WHERE LOWER(name) LIKE ?
+      ORDER BY visit_count DESC
+      LIMIT 5
+    ''', ['%$lower%']);
+  }
+
+  /// Find customer by phone number.
+  Future<Map<String, dynamic>?> findCustomerByPhone(String phone) async {
+    final db = await database;
+    final results = await db.query(
+      'customers',
+      where: 'phone = ?',
+      whereArgs: [phone],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Update customer visit after checkout.
+  Future<void> recordCustomerVisit(String customerId) async {
+    final db = await database;
+    await db.rawUpdate('''
+      UPDATE customers
+      SET visit_count = visit_count + 1,
+          last_visit_at = ?
+      WHERE id = ?
+    ''', [DateTime.now().toIso8601String(), customerId]);
+  }
+
+  /// Get a customer's most ordered products ("yang biasa").
+  Future<List<Map<String, dynamic>>> getCustomerFavorites(
+    String customerId, {
+    int limit = 3,
+  }) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT
+        ti.product_id,
+        ti.product_name,
+        COUNT(DISTINCT t.id) as order_count,
+        SUM(ti.quantity) as total_quantity
+      FROM transaction_items ti
+      JOIN transactions t ON t.id = ti.transaction_id
+      WHERE t.customer_id = ?
+      GROUP BY ti.product_id
+      ORDER BY order_count DESC, total_quantity DESC
+      LIMIT ?
+    ''', [customerId, limit]);
+  }
+
+  /// Get all customers, ordered by most recent visit.
+  Future<List<Map<String, dynamic>>> getCustomers({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      'customers',
+      orderBy: 'last_visit_at DESC',
+      limit: limit,
+    );
   }
 
   // ============ CLEANUP ============
