@@ -13,6 +13,15 @@ class StatusDisplay extends StatelessWidget {
       builder: (context, voice, cart, customer, _) {
         final isListening = voice.status == VoiceStatus.listening;
         final hasCartMessage = cart.lastMessage.isNotEmpty;
+        // Barista response (from voice/text processing) should take priority
+        // over generic cart messages like "Ditambahkan: ..."
+        final voiceMsg = voice.statusMessage;
+        final hasBaristaResponse = voiceMsg.isNotEmpty &&
+            voiceMsg != 'Tekan mic atau ketik perintah' &&
+            voiceMsg != 'Siap! Tekan mic atau ketik perintah' &&
+            voiceMsg != 'Bentar ya...' &&
+            voiceMsg != 'Ngomong aja, gak perlu tekan stop...' &&
+            voiceMsg != 'Dengerin nih...';
 
         Color bgColor;
         Color textColor;
@@ -24,6 +33,12 @@ class StatusDisplay extends StatelessWidget {
           textColor = Theme.of(context).colorScheme.error;
           icon = Icons.mic;
           message = voice.statusMessage;
+        } else if (hasBaristaResponse) {
+          // Barista response takes priority — this is the "fun" personality
+          bgColor = Theme.of(context).colorScheme.primaryContainer;
+          textColor = Theme.of(context).colorScheme.onPrimaryContainer;
+          icon = Icons.chat_bubble_outline;
+          message = voiceMsg;
         } else if (hasCartMessage) {
           bgColor = cart.isSuccess
               ? Theme.of(context).colorScheme.primary.withOpacity(0.1)

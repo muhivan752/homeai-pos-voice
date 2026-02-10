@@ -119,11 +119,25 @@ class BaristaParser {
   ];
 
   /// Keywords that signal customer identification.
+  /// Order matters — longer/more specific patterns first.
   static const List<String> _customerKeywords = [
-    'nama saya', 'nama gw', 'nama gue', 'nama aku',
-    'gw ', 'gue ', 'saya ', 'aku ',
-    'ini ', 'pelanggan ', 'customer ',
-    'atas nama',
+    'nama saya ', 'nama gw ', 'nama gue ', 'nama aku ',
+    'atas nama ',
+    'pelanggan ', 'customer ',
+    // Greetings + name: "hello Andy", "halo Budi", "hai Sarah"
+    'halo ', 'hai ', 'hello ', 'hi ', 'hey ',
+    // Pronouns as prefix: "gw Andi", "saya Budi"
+    'gw ', 'gue ', 'gua ', 'saya ', 'aku ',
+  ];
+
+  /// Words that are NOT customer names — products, commands, etc.
+  /// If the extracted "name" matches these, it's not a customer.
+  static const List<String> _notAName = [
+    'kopi', 'susu', 'teh', 'latte', 'americano', 'cappuccino',
+    'roti', 'nasi', 'goreng', 'kentang', 'keripik', 'coklat',
+    'mau', 'pesan', 'pesen', 'beli', 'order', 'tambah',
+    'bayar', 'batal', 'cancel', 'hapus', 'cek', 'stok',
+    'menu', 'biasa', 'lagi', 'yang',
   ];
 
   /// Keywords that signal "yang biasa" / regular order.
@@ -155,13 +169,13 @@ class BaristaParser {
     'linkaja': 'E-Wallet',
   };
 
-  /// Modifiers to strip from product search (not part of product name)
+  /// Modifiers to strip from product search (not part of product name).
+  /// NOTE: Do NOT include 'saya','aku','gue','gw','gua' — they're customer keywords.
   static const List<String> _modifiers = [
     'dong', 'donk', 'ya', 'yaa', 'yaaa', 'yah',
     'nih', 'ini', 'itu', 'yang', 'nya', 'kak',
     'bang', 'mas', 'mbak', 'bro', 'sis',
     'tolong', 'bisa', 'boleh', 'coba',
-    'saya', 'aku', 'gue', 'gw', 'gua',
     'mau', 'minta', 'kasih', 'please',
   ];
 
@@ -180,14 +194,10 @@ class BaristaParser {
       return ParseResult(intent: BaristaIntent.unknown, rawText: raw);
     }
 
-    // 1. Check greetings first (short commands)
-    if (_matchesAny(lower, _greetingKeywords)) {
-      return ParseResult(
-        intent: BaristaIntent.greeting,
-        rawText: raw,
-        confidence: 0.95,
-      );
-    }
+    // 1. Check customer identification FIRST ("gw Andi", "hello Andy", "halo Budi")
+    // Must come before greeting check because "hello Andy" = customer, not greeting
+    final customerResult = _parseCustomerIdentity(lower, raw);
+    if (customerResult != null) return customerResult;
 
     // 2. Check "yang biasa" (before product matching)
     if (_matchesAny(lower, _biasaKeywords)) {
@@ -198,9 +208,14 @@ class BaristaParser {
       );
     }
 
-    // 3. Check customer identification ("gw Andi", "nama saya Budi")
-    final customerResult = _parseCustomerIdentity(lower, raw);
-    if (customerResult != null) return customerResult;
+    // 3. Check greetings (only if no name detected — pure greetings like "halo", "pagi")
+    if (_matchesAny(lower, _greetingKeywords)) {
+      return ParseResult(
+        intent: BaristaIntent.greeting,
+        rawText: raw,
+        confidence: 0.95,
+      );
+    }
 
     // 4. Check thanks
     if (_matchesAny(lower, _thanksKeywords)) {
@@ -277,9 +292,8 @@ class BaristaParser {
   // --- Private parsing methods ---
 
   /// Parse customer identity from text.
-  /// Patterns: "gw Andi", "nama saya Budi", "atas nama Sarah", "pelanggan Andi"
+  /// Patterns: "gw Andi", "hello Andy", "nama saya Budi", "halo Sarah"
   ParseResult? _parseCustomerIdentity(String lower, String raw) {
-    // Check each keyword pattern
     for (final kw in _customerKeywords) {
       if (!lower.contains(kw)) continue;
 
@@ -287,31 +301,36 @@ class BaristaParser {
       final idx = lower.indexOf(kw) + kw.length;
       var name = lower.substring(idx).trim();
 
-      // Strip modifiers from name
-      for (final mod in _modifiers) {
-        name = name.replaceAll(RegExp('\\b$mod\\b'), '').trim();
-      }
+      // Strip filler words from name
       for (final filler in _fillerWords) {
         name = name.replaceAll(RegExp('\\b$filler\\b'), '').trim();
       }
 
-      // Clean up and capitalize
+      // Clean up
       name = name.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-      if (name.isNotEmpty && name.length >= 2) {
-        // Capitalize first letter of each word
-        final capitalized = name.split(' ').map((w) {
-          if (w.isEmpty) return w;
-          return w[0].toUpperCase() + w.substring(1).toLowerCase();
-        }).join(' ');
+      // Must have a name left, at least 2 chars
+      if (name.isEmpty || name.length < 2) continue;
 
-        return ParseResult(
-          intent: BaristaIntent.identifyCustomer,
-          rawText: raw,
-          customerName: capitalized,
-          confidence: 0.9,
-        );
-      }
+      // If the "name" is actually a product/command word, skip — not a customer
+      final firstWord = name.split(' ').first.toLowerCase();
+      if (_notAName.contains(firstWord)) continue;
+
+      // Also skip if it's a number word
+      if (_wordNumbers.containsKey(firstWord)) continue;
+
+      // Capitalize first letter of each word
+      final capitalized = name.split(' ').map((w) {
+        if (w.isEmpty) return w;
+        return w[0].toUpperCase() + w.substring(1).toLowerCase();
+      }).join(' ');
+
+      return ParseResult(
+        intent: BaristaIntent.identifyCustomer,
+        rawText: raw,
+        customerName: capitalized,
+        confidence: 0.9,
+      );
     }
 
     return null;
