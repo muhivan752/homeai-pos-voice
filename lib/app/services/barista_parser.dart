@@ -41,13 +41,13 @@ class BaristaParser {
   // Last added product for context ("satu lagi", "tambah lagi")
   Product? _lastProduct;
 
-  /// Word-to-number mapping for Indonesian
+  /// Word-to-number mapping for Indonesian + English
   static const Map<String, int> _wordNumbers = {
-    'satu': 1, 'se': 1, 'siji': 1,
-    'dua': 2, 'duo': 2, 'loro': 2,
-    'tiga': 3, 'three': 3, 'telu': 3,
-    'empat': 4, 'four': 4, 'papat': 4,
-    'lima': 5, 'five': 5,
+    'satu': 1, 'se': 1, 'siji': 1, 'one': 1, 'wan': 1,
+    'dua': 2, 'duo': 2, 'loro': 2, 'two': 2, 'tu': 2,
+    'tiga': 3, 'three': 3, 'telu': 3, 'tri': 3, 'tree': 3,
+    'empat': 4, 'four': 4, 'papat': 4, 'for': 4,
+    'lima': 5, 'five': 5, 'fife': 5,
     'enam': 6, 'six': 6, 'nem': 6,
     'tujuh': 7, 'seven': 7, 'pitu': 7,
     'delapan': 8, 'eight': 8, 'wolu': 8,
@@ -437,8 +437,8 @@ class BaristaParser {
       }
     }
 
-    // Only return if similarity is reasonable
-    if (bestScore >= 0.6) return bestMatch;
+    // Only return if similarity is reasonable (0.5 = more forgiving for STT errors)
+    if (bestScore >= 0.5) return bestMatch;
 
     // Pass 4: Check if any word in query matches a product
     final words = lowerQuery.split(RegExp(r'\s+'));

@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import '../models/product.dart';
 import '../services/barista_parser.dart';
 import '../services/barista_response.dart';
+import '../services/stt_corrector.dart';
 import 'cart_provider.dart';
 
 enum VoiceStatus {
@@ -17,6 +18,7 @@ class VoiceProvider extends ChangeNotifier {
   final SpeechToText _speech = SpeechToText();
   final BaristaParser _parser = BaristaParser();
   final BaristaResponse _responder = BaristaResponse();
+  final SttCorrector _corrector = SttCorrector();
 
   VoiceStatus _status = VoiceStatus.idle;
   String _lastWords = '';
@@ -251,10 +253,10 @@ class VoiceProvider extends ChangeNotifier {
       return 'Gak nangkep yang jelas, coba bilang lagi?';
     }
 
-    if (_looksEnglish(lower)) {
-      return 'Kedeteksi bahasa Inggris nih. Coba buka Settings > '
-          'Google > Voice > Offline speech > download Indonesian. '
-          'Atau ketik aja dulu!';
+    // Don't block English — the STT corrector will translate it
+    // Only warn if it's heavily English (4+ indicators) AND very short
+    if (_looksEnglish(lower) && lower.split(' ').length <= 2) {
+      return 'Hmm, coba ngomong lebih lengkap ya!';
     }
 
     if (confidence > 0 && confidence < 0.3) {
@@ -271,12 +273,15 @@ class VoiceProvider extends ChangeNotifier {
         englishHits++;
       }
     }
-    return englishHits >= 2;
+    return englishHits >= 3;
   }
 
   String _executeBarista(String text, CartProvider cartProvider) {
-    debugPrint('[POS Voice] Parsing: "$text"');
-    final result = _parser.parse(text);
+    // Run STT corrector BEFORE parsing
+    final corrected = _corrector.correct(text);
+    debugPrint('[POS Voice] Original: "$text" → Corrected: "$corrected"');
+    final textToParse = corrected.isNotEmpty ? corrected : text;
+    final result = _parser.parse(textToParse);
     debugPrint('[POS Voice] Intent: ${result.intent}, product: ${result.product?.name}, qty: ${result.quantity}');
     final isFirstItem = cartProvider.itemCount == 0;
 

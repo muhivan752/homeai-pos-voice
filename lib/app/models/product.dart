@@ -22,7 +22,7 @@ class Product {
       name: 'Kopi Susu',
       price: 18000,
       category: 'drink',
-      aliases: ['kopi susu', 'kosu', 'kop sus'],
+      aliases: ['kopi susu', 'kosu', 'kop sus', 'coffee susu', 'coffee milk', 'kopi milk', 'cofi susu'],
       barcode: '8991234567001',
     ),
     const Product(
@@ -30,7 +30,7 @@ class Product {
       name: 'Es Teh',
       price: 8000,
       category: 'drink',
-      aliases: ['es teh', 'esteh', 'teh es'],
+      aliases: ['es teh', 'esteh', 'teh es', 'ice tea', 'iced tea', 'ice teh', 'es tea'],
       barcode: '8991234567002',
     ),
     const Product(
@@ -38,7 +38,7 @@ class Product {
       name: 'Americano',
       price: 22000,
       category: 'drink',
-      aliases: ['americano', 'amerika', 'kopi amerika'],
+      aliases: ['americano', 'amerika', 'kopi amerika', 'americanos', 'amerikano', 'american', 'amerikan'],
       barcode: '8991234567003',
     ),
     const Product(
@@ -46,7 +46,7 @@ class Product {
       name: 'Cafe Latte',
       price: 25000,
       category: 'drink',
-      aliases: ['latte', 'late', 'kopi latte'],
+      aliases: ['latte', 'late', 'kopi latte', 'cafe latte', 'cafelatte', 'kafe latte', 'lte', 'latter', 'lattes'],
       barcode: '8991234567004',
     ),
     const Product(
@@ -54,7 +54,7 @@ class Product {
       name: 'Cappuccino',
       price: 25000,
       category: 'drink',
-      aliases: ['cappuccino', 'kapucino', 'capucino'],
+      aliases: ['cappuccino', 'kapucino', 'capucino', 'cappucino', 'capuchino', 'cappuccinos', 'kapuchino', 'kappucino'],
       barcode: '8991234567005',
     ),
     const Product(
@@ -62,7 +62,7 @@ class Product {
       name: 'Roti Bakar',
       price: 15000,
       category: 'food',
-      aliases: ['roti bakar', 'rotibakar', 'robar'],
+      aliases: ['roti bakar', 'rotibakar', 'robar', 'toast', 'roti', 'bread toast'],
       barcode: '8991234567006',
     ),
     const Product(
@@ -70,7 +70,7 @@ class Product {
       name: 'Kentang Goreng',
       price: 20000,
       category: 'food',
-      aliases: ['kentang goreng', 'kentang', 'french fries'],
+      aliases: ['kentang goreng', 'kentang', 'french fries', 'fries', 'potato fries', 'fried potato'],
       barcode: '8991234567007',
     ),
     const Product(
@@ -78,7 +78,7 @@ class Product {
       name: 'Nasi Goreng',
       price: 25000,
       category: 'food',
-      aliases: ['nasi goreng', 'nasgor', 'nasigoreng'],
+      aliases: ['nasi goreng', 'nasgor', 'nasigoreng', 'fried rice', 'nasi greng', 'nasigreng'],
       barcode: '8991234567008',
     ),
     const Product(
@@ -94,7 +94,7 @@ class Product {
       name: 'Coklat Bar',
       price: 15000,
       category: 'snack',
-      aliases: ['coklat', 'chocolate', 'cokelat'],
+      aliases: ['coklat', 'chocolate', 'cokelat', 'choco', 'chocolates', 'coklat bar'],
       barcode: '8991234567010',
     ),
   ];
