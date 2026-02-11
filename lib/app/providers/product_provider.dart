@@ -11,14 +11,13 @@ class ProductProvider extends ChangeNotifier {
   String? _selectedCategory;
   bool _isLoading = false;
   String? _error;
-  DateTime? _lastSyncedAt;
 
-  List<Product> get products => _selectedCategory == null ? _products : _filteredProducts;
+  List<Product> get products => _selectedCategory == null || _selectedCategory == 'all' ? _products : _filteredProducts;
+  List<Product> get allProducts => _products;
   List<Map<String, dynamic>> get categories => _categories;
   String? get selectedCategory => _selectedCategory;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  DateTime? get lastSyncedAt => _lastSyncedAt;
   bool get hasProducts => _products.isNotEmpty;
 
   Map<String, List<Product>> get productsByCategory {
@@ -47,33 +46,35 @@ class ProductProvider extends ChangeNotifier {
         ];
       }
 
-      final dbProducts = await _db.getProducts();
+      var dbProducts = await _db.getProducts();
+
+      // Seed default products on first launch
+      if (dbProducts.isEmpty) {
+        await _seedDefaultProducts();
+        dbProducts = await _db.getProducts();
+      }
 
       if (dbProducts.isNotEmpty) {
-        _products = dbProducts.map((p) => Product(
-          id: p['id'] ?? p['item_code'],
-          name: p['name'],
-          price: (p['price'] as num).toDouble(),
-          category: p['category'] ?? 'other',
-          aliases: (p['aliases'] as String?)?.split(',') ?? [],
-          barcode: p['barcode'],
-        )).toList();
-
-        if (dbProducts.first['synced_at'] != null) {
-          _lastSyncedAt = DateTime.tryParse(dbProducts.first['synced_at']);
-        }
+        _products = dbProducts.map((p) => Product.fromMap(p)).toList();
       } else {
-        // Load sample products if DB is empty
         _products = Product.sampleProducts;
       }
+
+      // Keep static sampleProducts in sync — parser and voice use this
+      Product.sampleProducts = List.from(_products);
     } catch (e) {
       _error = e.toString();
-      // Fallback to sample products
       _products = Product.sampleProducts;
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// Seed default products into SQLite on first launch.
+  Future<void> _seedDefaultProducts() async {
+    final batch = Product.sampleProducts.map((p) => p.toMap()).toList();
+    await _db.insertProducts(batch);
   }
 
   void setCategory(String? category) {
@@ -86,6 +87,34 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ============ CRUD ============
+
+  /// Add a new product.
+  Future<void> addProduct(Product product) async {
+    await _db.insertProduct(product.toMap());
+    await loadProducts();
+  }
+
+  /// Update an existing product.
+  Future<void> updateProduct(Product product) async {
+    await _db.updateProduct(product.id, {
+      'name': product.name,
+      'price': product.price,
+      'category': product.category,
+      'aliases': product.aliases.join(','),
+      'barcode': product.barcode,
+    });
+    await loadProducts();
+  }
+
+  /// Soft-delete a product (set is_active = 0).
+  Future<void> deleteProduct(String id) async {
+    await _db.deleteProduct(id);
+    await loadProducts();
+  }
+
+  // ============ SEARCH ============
+
   Future<Product?> findByBarcode(String barcode) async {
     // Check in memory first
     for (final product in _products) {
@@ -95,14 +124,7 @@ class ProductProvider extends ChangeNotifier {
     // Check in database
     final dbProduct = await _db.getProductByBarcode(barcode);
     if (dbProduct != null) {
-      return Product(
-        id: dbProduct['id'] ?? dbProduct['item_code'],
-        name: dbProduct['name'],
-        price: (dbProduct['price'] as num).toDouble(),
-        category: dbProduct['category'] ?? 'other',
-        aliases: (dbProduct['aliases'] as String?)?.split(',') ?? [],
-        barcode: dbProduct['barcode'],
-      );
+      return Product.fromMap(dbProduct);
     }
 
     return null;

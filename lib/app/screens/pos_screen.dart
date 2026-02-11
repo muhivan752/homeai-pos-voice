@@ -15,6 +15,7 @@ import '../widgets/sync_indicator.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/product_search.dart';
 import 'history_screen.dart';
+import 'menu_management_screen.dart';
 import 'payment_screen.dart';
 import 'login_screen.dart';
 
@@ -588,6 +589,19 @@ class SettingsSheet extends StatelessWidget {
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 12),
+          _SettingsTile(
+            icon: Icons.restaurant_menu,
+            iconColor: Colors.deepPurple,
+            title: 'Kelola Menu',
+            subtitle: 'Tambah, edit, hapus produk',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MenuManagementScreen()),
+              );
+            },
+          ),
           _SettingsTile(
             icon: Icons.cloud_outlined,
             iconColor: Colors.blue,

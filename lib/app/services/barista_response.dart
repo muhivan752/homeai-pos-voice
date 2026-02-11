@@ -219,12 +219,23 @@ class BaristaResponse {
     ]);
   }
 
-  /// Response for menu inquiry
+  /// Response for menu inquiry — uses current product catalog.
   String _menuResponse() {
+    final products = Product.sampleProducts;
+    if (products.isEmpty) {
+      return 'Belum ada menu nih. Minta owner tambahin dulu ya!';
+    }
+
+    // Show top 5 products with prices
+    final top = products.take(5).map(
+      (p) => '${p.name} ${(p.price / 1000).toStringAsFixed(0)}rb',
+    ).join(', ');
+    final count = products.length;
+
     return _pick([
-      'Kita punya kopi, teh, makanan, dan snack! Mau coba yang mana?',
-      'Ada Kopi Susu, Americano, Latte, Cappuccino, Es Teh, Roti Bakar, dan lainnya! Mau apa?',
-      'Menu favorit: Kopi Susu 18rb, Latte 25rb, Americano 22rb. Mau yang mana?',
+      'Kita punya $count menu! Ada $top, dan lainnya. Mau apa?',
+      'Ada $top. Total $count pilihan! Mau yang mana?',
+      'Menu kita: $top, dll. Mau coba yang mana?',
     ]);
   }
 

@@ -332,6 +332,16 @@ class DatabaseHelper {
     return results.isNotEmpty ? results.first : null;
   }
 
+  Future<int> updateProduct(String id, Map<String, dynamic> updates) async {
+    final db = await database;
+    return await db.update('products', updates, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteProduct(String id) async {
+    final db = await database;
+    return await db.update('products', {'is_active': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<int> clearProducts() async {
     final db = await database;
     return await db.delete('products');

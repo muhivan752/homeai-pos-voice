@@ -15,7 +15,54 @@ class Product {
     this.barcode,
   });
 
-  // Sample products for demo
+  /// Create Product from SQLite map.
+  factory Product.fromMap(Map<String, dynamic> map) {
+    return Product(
+      id: map['id'] ?? map['item_code'] ?? '',
+      name: map['name'] ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0,
+      category: map['category'] ?? 'other',
+      aliases: (map['aliases'] as String?)?.split(',').where((a) => a.trim().isNotEmpty).toList() ?? [],
+      barcode: map['barcode'],
+    );
+  }
+
+  /// Convert to SQLite map.
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'item_code': id,
+      'name': name,
+      'price': price,
+      'category': category,
+      'aliases': aliases.join(','),
+      'barcode': barcode,
+      'is_active': 1,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Copy with modified fields.
+  Product copyWith({
+    String? id,
+    String? name,
+    double? price,
+    String? category,
+    List<String>? aliases,
+    String? barcode,
+  }) {
+    return Product(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      category: category ?? this.category,
+      aliases: aliases ?? this.aliases,
+      barcode: barcode ?? this.barcode,
+    );
+  }
+
+  // Default products — used as seed data for first launch.
+  // After seeding, this list gets updated from SQLite.
   static List<Product> sampleProducts = [
     const Product(
       id: 'kopi-susu',

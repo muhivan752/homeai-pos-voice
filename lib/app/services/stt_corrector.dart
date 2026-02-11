@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../models/product.dart';
 
 /// Post-processor for Speech-to-Text output.
 ///
@@ -75,16 +76,8 @@ class SttCorrector {
     'total': 'total',
   };
 
-  /// Known vocabulary: product names, numbers, and command words.
-  /// Used for word splitting.
-  static const List<String> _knownWords = [
-    // Products
-    'kopi', 'susu', 'teh', 'es', 'latte', 'late',
-    'americano', 'cappuccino', 'capucino', 'kapucino',
-    'roti', 'bakar', 'nasi', 'goreng', 'kentang',
-    'keripik', 'coklat', 'cokelat',
-    // English product names (STT might keep these)
-    'coffee', 'latte', 'cappuccino', 'americano',
+  /// Base command/number vocabulary (always present).
+  static const List<String> _baseKnownWords = [
     // Numbers
     'satu', 'dua', 'tiga', 'empat', 'lima',
     'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh',
@@ -92,8 +85,26 @@ class SttCorrector {
     'jual', 'tambah', 'pesan', 'pesen', 'mau', 'minta',
     'bayar', 'batal', 'hapus', 'cek', 'stok',
     'checkout', 'cancel', 'total', 'selesai',
-    'lagi', 'sama', 'yang',
+    'lagi', 'sama', 'yang', 'es',
   ];
+
+  /// Build dynamic known words from base vocabulary + product catalog.
+  List<String> get _knownWords {
+    final words = <String>{..._baseKnownWords};
+    for (final p in Product.sampleProducts) {
+      // Add each word from product name
+      for (final w in p.name.toLowerCase().split(' ')) {
+        if (w.length >= 2) words.add(w);
+      }
+      // Add aliases
+      for (final alias in p.aliases) {
+        for (final w in alias.toLowerCase().split(' ')) {
+          if (w.length >= 2) words.add(w);
+        }
+      }
+    }
+    return words.toList();
+  }
 
   /// Phonetic corrections for common misheard words.
   static const Map<String, String> _phoneticFixes = {

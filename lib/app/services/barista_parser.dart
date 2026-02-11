@@ -130,15 +130,25 @@ class BaristaParser {
     'gw ', 'gue ', 'gua ', 'saya ', 'aku ',
   ];
 
-  /// Words that are NOT customer names — products, commands, etc.
-  /// If the extracted "name" matches these, it's not a customer.
-  static const List<String> _notAName = [
-    'kopi', 'susu', 'teh', 'latte', 'americano', 'cappuccino',
-    'roti', 'nasi', 'goreng', 'kentang', 'keripik', 'coklat',
+  /// Command words that are NOT customer names.
+  static const List<String> _notANameCommands = [
     'mau', 'pesan', 'pesen', 'beli', 'order', 'tambah',
     'bayar', 'batal', 'cancel', 'hapus', 'cek', 'stok',
     'menu', 'biasa', 'lagi', 'yang',
   ];
+
+  /// Build dynamic not-a-name set from current product catalog + command words.
+  Set<String> _buildNotANameSet(List<Product>? products) {
+    final set = <String>{..._notANameCommands};
+    final catalog = products ?? Product.sampleProducts;
+    for (final p in catalog) {
+      // Add each word from product name
+      for (final word in p.name.toLowerCase().split(' ')) {
+        if (word.length >= 3) set.add(word);
+      }
+    }
+    return set;
+  }
 
   /// Keywords that signal "yang biasa" / regular order.
   static const List<String> _biasaKeywords = [
@@ -196,7 +206,7 @@ class BaristaParser {
 
     // 1. Check customer identification FIRST ("gw Andi", "hello Andy", "halo Budi")
     // Must come before greeting check because "hello Andy" = customer, not greeting
-    final customerResult = _parseCustomerIdentity(lower, raw);
+    final customerResult = _parseCustomerIdentity(lower, raw, products);
     if (customerResult != null) return customerResult;
 
     // 2. Check "yang biasa" (before product matching)
@@ -293,7 +303,9 @@ class BaristaParser {
 
   /// Parse customer identity from text.
   /// Patterns: "gw Andi", "hello Andy", "nama saya Budi", "halo Sarah"
-  ParseResult? _parseCustomerIdentity(String lower, String raw) {
+  ParseResult? _parseCustomerIdentity(String lower, String raw, List<Product>? products) {
+    final notAName = _buildNotANameSet(products);
+
     for (final kw in _customerKeywords) {
       if (!lower.contains(kw)) continue;
 
@@ -314,7 +326,7 @@ class BaristaParser {
 
       // If the "name" is actually a product/command word, skip — not a customer
       final firstWord = name.split(' ').first.toLowerCase();
-      if (_notAName.contains(firstWord)) continue;
+      if (notAName.contains(firstWord)) continue;
 
       // Also skip if it's a number word
       if (_wordNumbers.containsKey(firstWord)) continue;
