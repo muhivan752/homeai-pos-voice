@@ -114,6 +114,9 @@ class CartProvider extends ChangeNotifier {
     String? cashierName,
     String? customerName,
     String? customerId,
+    double? subtotal,
+    double taxPb1 = 0,
+    double taxPpn = 0,
   }) async {
     if (_items.isEmpty) {
       _lastMessage = 'Keranjang kosong!';
@@ -127,15 +130,19 @@ class CartProvider extends ChangeNotifier {
 
     try {
       final transactionId = _uuid.v4();
-      final totalAmount = total;
+      final itemsSubtotal = subtotal ?? total;
+      final grandTotal = itemsSubtotal + taxPb1 + taxPpn;
       final now = DateTime.now().toIso8601String();
 
       // Prepare transaction data
       final transaction = {
         'id': transactionId,
-        'total': totalAmount,
+        'subtotal': itemsSubtotal,
+        'tax_pb1': taxPb1,
+        'tax_ppn': taxPpn,
+        'total': grandTotal,
         'payment_method': paymentMethod,
-        'payment_amount': paymentAmount ?? totalAmount,
+        'payment_amount': paymentAmount ?? grandTotal,
         'change_amount': changeAmount ?? 0,
         'payment_reference': paymentReference,
         'customer_name': customerName ?? 'Walk-in Customer',
@@ -164,7 +171,7 @@ class CartProvider extends ChangeNotifier {
       final itemsCount = itemCount;
       _items.clear();
 
-      _lastMessage = 'Transaksi berhasil! Total: Rp ${_formatCurrency(totalAmount)} ($itemsCount item)';
+      _lastMessage = 'Transaksi berhasil! Total: Rp ${_formatCurrency(grandTotal)} ($itemsCount item)';
       _isSuccess = true;
       _isProcessing = false;
       notifyListeners();

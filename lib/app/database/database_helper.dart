@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -73,6 +73,9 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE transactions (
         id TEXT PRIMARY KEY,
+        subtotal REAL,
+        tax_pb1 REAL DEFAULT 0,
+        tax_ppn REAL DEFAULT 0,
         total REAL NOT NULL,
         payment_method TEXT DEFAULT 'cash',
         payment_amount REAL,
@@ -132,6 +135,14 @@ class DatabaseHelper {
         visit_count INTEGER DEFAULT 0,
         last_visit_at TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Settings table — key-value store for app config (tax, etc.)
+    await db.execute('''
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
       )
     ''');
 
@@ -275,6 +286,24 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)');
+      } catch (_) {}
+    }
+
+    // Version 6: Tax system — PB1 + PPN compliance
+    if (oldVersion < 6) {
+      // Settings table for tax config
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
+
+      // Tax columns on transactions
+      try {
+        await db.execute('ALTER TABLE transactions ADD COLUMN subtotal REAL');
+        await db.execute('ALTER TABLE transactions ADD COLUMN tax_pb1 REAL DEFAULT 0');
+        await db.execute('ALTER TABLE transactions ADD COLUMN tax_ppn REAL DEFAULT 0');
       } catch (_) {}
     }
   }
@@ -645,6 +674,29 @@ class DatabaseHelper {
       orderBy: 'last_visit_at DESC',
       limit: limit,
     );
+  }
+
+  // ============ SETTINGS ============
+
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final results = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    return results.isNotEmpty ? results.first['value'] as String : null;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, String>> getAllSettings() async {
+    final db = await database;
+    final results = await db.query('settings');
+    return {for (final r in results) r['key'] as String: r['value'] as String};
   }
 
   // ============ CLEANUP ============

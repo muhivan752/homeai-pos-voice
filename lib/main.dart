@@ -5,6 +5,7 @@ import 'app/providers/cart_provider.dart';
 import 'app/providers/voice_provider.dart';
 import 'app/providers/product_provider.dart';
 import 'app/providers/customer_provider.dart';
+import 'app/providers/tax_provider.dart';
 import 'app/services/sync_service.dart';
 import 'app/services/erp_service.dart';
 import 'app/services/auth_service.dart';
@@ -28,6 +29,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => VoiceProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()..loadProducts()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
+        ChangeNotifierProvider(create: (_) => TaxProvider()..load()),
         ChangeNotifierProvider.value(value: syncService),
         ChangeNotifierProvider.value(value: authService),
       ],

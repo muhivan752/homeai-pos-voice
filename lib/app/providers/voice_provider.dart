@@ -7,6 +7,7 @@ import '../services/barista_response.dart';
 import '../services/stt_corrector.dart';
 import 'cart_provider.dart';
 import 'customer_provider.dart';
+import 'tax_provider.dart';
 
 enum VoiceStatus {
   idle,
@@ -31,6 +32,7 @@ class VoiceProvider extends ChangeNotifier {
   // For auto-stop: stored so _onStatus can auto-process
   CartProvider? _activeCart;
   CustomerProvider? _activeCustomer;
+  TaxProvider? _activeTax;
   bool _manualStop = false;
 
   VoiceStatus get status => _status;
@@ -105,10 +107,12 @@ class VoiceProvider extends ChangeNotifier {
             final text = _lastWords;
             final cart = _activeCart;
             final customer = _activeCustomer;
+            final tax = _activeTax;
             _activeCart = null;
             _activeCustomer = null;
+            _activeTax = null;
             if (text.isNotEmpty && cart != null) {
-              processText(text, cart, customerProvider: customer);
+              processText(text, cart, customerProvider: customer, taxProvider: tax);
             }
           });
         } else {
@@ -116,6 +120,7 @@ class VoiceProvider extends ChangeNotifier {
           _statusMessage = 'Gak kedengeran nih, coba lagi atau ketik aja!';
           _activeCart = null;
           _activeCustomer = null;
+          _activeTax = null;
           notifyListeners();
         }
       }
@@ -125,6 +130,7 @@ class VoiceProvider extends ChangeNotifier {
   void _onError(dynamic error) {
     _status = VoiceStatus.error;
     _activeCart = null;
+    _activeTax = null;
     _manualStop = false;
 
     final msg = error.errorMsg?.toString() ?? '';
@@ -145,7 +151,7 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   /// Start listening. Pass providers so auto-stop can process.
-  Future<void> startListening(CartProvider cartProvider, {CustomerProvider? customerProvider}) async {
+  Future<void> startListening(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
     if (!_isAvailable) {
       await initialize();
     }
@@ -161,6 +167,7 @@ class VoiceProvider extends ChangeNotifier {
     _manualStop = false;
     _activeCart = cartProvider;
     _activeCustomer = customerProvider;
+    _activeTax = taxProvider;
     _status = VoiceStatus.listening;
     _statusMessage = 'Ngomong aja, gak perlu tekan stop...';
     notifyListeners();
@@ -208,12 +215,13 @@ class VoiceProvider extends ChangeNotifier {
   Future<void> stopListening() async {
     _manualStop = true;
     _activeCart = null;
+    _activeTax = null;
     await _speech.stop();
     _status = VoiceStatus.idle;
     notifyListeners();
   }
 
-  Future<void> processCommand(CartProvider cartProvider, {CustomerProvider? customerProvider}) async {
+  Future<void> processCommand(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
     if (_lastWords.isEmpty) {
       _statusMessage = 'Gak kedengeran nih, coba lagi atau ketik aja!';
       _status = VoiceStatus.idle;
@@ -235,7 +243,7 @@ class VoiceProvider extends ChangeNotifier {
         return;
       }
 
-      final result = await _executeBarista(_lastWords, cartProvider, customerProvider: customerProvider);
+      final result = await _executeBarista(_lastWords, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider);
       debugPrint('[POS Voice] Result: $result');
       _statusMessage = result;
     } catch (e, stackTrace) {
@@ -282,7 +290,7 @@ class VoiceProvider extends ChangeNotifier {
     return englishHits >= 3;
   }
 
-  Future<String> _executeBarista(String text, CartProvider cartProvider, {CustomerProvider? customerProvider}) async {
+  Future<String> _executeBarista(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
     // Run STT corrector BEFORE parsing
     final corrected = _corrector.correct(text);
     debugPrint('[POS Voice] Original: "$text" → Corrected: "$corrected"');
@@ -315,10 +323,15 @@ class VoiceProvider extends ChangeNotifier {
       case BaristaIntent.checkout:
         if (cartProvider.itemCount > 0) {
           if (result.paymentMethod != null) {
+            final subtotal = cartProvider.total;
+            final tax = taxProvider?.calculate(subtotal);
             final txId = await cartProvider.checkoutWithPayment(
               paymentMethod: result.paymentMethod!,
               customerName: customerProvider?.customerName,
               customerId: customerProvider?.activeCustomer?.id,
+              subtotal: subtotal,
+              taxPb1: tax?.pb1Amount ?? 0,
+              taxPpn: tax?.ppnAmount ?? 0,
             );
             // Record customer visit after successful checkout
             if (txId != null && customerProvider?.hasCustomer == true) {
@@ -384,14 +397,14 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   /// Process a text command directly (for text input or auto-stop).
-  Future<String> processText(String text, CartProvider cartProvider, {CustomerProvider? customerProvider}) async {
+  Future<String> processText(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
     _lastWords = text;
     _status = VoiceStatus.processing;
     notifyListeners();
 
     try {
       debugPrint('[POS Voice] Processing text: "$text"');
-      final result = await _executeBarista(text, cartProvider, customerProvider: customerProvider);
+      final result = await _executeBarista(text, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider);
       debugPrint('[POS Voice] Result: $result');
       _statusMessage = result;
       return result;
@@ -412,6 +425,7 @@ class VoiceProvider extends ChangeNotifier {
     _statusMessage = 'Tekan mic atau ketik perintah';
     _activeCart = null;
     _activeCustomer = null;
+    _activeTax = null;
     _manualStop = false;
     _parser.clearContext();
     notifyListeners();

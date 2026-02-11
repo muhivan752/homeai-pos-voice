@@ -4,6 +4,7 @@ import '../providers/cart_provider.dart';
 import '../providers/voice_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/customer_provider.dart';
+import '../providers/tax_provider.dart';
 import '../services/erp_service.dart';
 import '../services/sync_service.dart';
 import '../services/auth_service.dart';
@@ -277,8 +278,8 @@ class _PosScreenState extends State<PosScreen> {
             const Expanded(child: ProductGrid()),
 
             // Bottom Bar with Total
-            Consumer<CartProvider>(
-              builder: (context, cart, _) => Container(
+            Consumer2<CartProvider, TaxProvider>(
+              builder: (context, cart, tax, _) => Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
@@ -306,13 +307,31 @@ class _PosScreenState extends State<PosScreen> {
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            Text(
-                              'Rp ${_formatCurrency(cart.total)}',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final breakdown = tax.calculate(cart.total);
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Rp ${_formatCurrency(breakdown.grandTotal)}',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                    if (breakdown.hasTax)
+                                      Text(
+                                        'inc. pajak',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -352,13 +371,13 @@ class _PosScreenState extends State<PosScreen> {
   void _checkout(BuildContext context) {
     final cart = context.read<CartProvider>();
     final authService = context.read<AuthService>();
-    final total = cart.total;
+    final subtotal = cart.total;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => PaymentScreen(
-          total: total,
+          subtotal: subtotal,
           onPaymentComplete: (result) async {
             Navigator.pop(context);
 
@@ -386,7 +405,7 @@ class _PosScreenState extends State<PosScreen> {
             // Get customer info if available
             final customerProv = context.read<CustomerProvider>();
 
-            // Process checkout with payment details
+            // Process checkout with payment details + tax
             final transactionId = await cart.checkoutWithPayment(
               paymentMethod: result.method,
               paymentAmount: result.amount,
@@ -396,6 +415,9 @@ class _PosScreenState extends State<PosScreen> {
               cashierName: authService.currentUserName,
               customerName: customerProv.customerName,
               customerId: customerProv.activeCustomer?.id,
+              subtotal: result.subtotal,
+              taxPb1: result.taxPb1,
+              taxPpn: result.taxPpn,
             );
 
             // Record customer visit
@@ -603,6 +625,16 @@ class SettingsSheet extends StatelessWidget {
             },
           ),
           _SettingsTile(
+            icon: Icons.receipt_long,
+            iconColor: Colors.teal,
+            title: 'Pajak (PB1 & PPN)',
+            subtitle: _taxSubtitle(context),
+            onTap: () {
+              Navigator.pop(context);
+              _showTaxSettings(context);
+            },
+          ),
+          _SettingsTile(
             icon: Icons.cloud_outlined,
             iconColor: Colors.blue,
             title: 'ERPNext Server',
@@ -722,6 +754,200 @@ class SettingsSheet extends StatelessWidget {
         ),
       );
     }
+  }
+
+  String _taxSubtitle(BuildContext context) {
+    final tax = context.watch<TaxProvider>();
+    if (!tax.pb1Enabled && !tax.ppnEnabled) return 'Nonaktif';
+    final parts = <String>[];
+    if (tax.pb1Enabled) parts.add('PB1 ${tax.pb1Rate.toStringAsFixed(0)}%');
+    if (tax.ppnEnabled) parts.add('PPN ${tax.ppnRate.toStringAsFixed(0)}%');
+    return parts.join(' + ');
+  }
+
+  void _showTaxSettings(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const _TaxSettingsDialog(),
+    );
+  }
+}
+
+class _TaxSettingsDialog extends StatelessWidget {
+  const _TaxSettingsDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TaxProvider>(
+      builder: (context, tax, _) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.receipt_long, color: Colors.teal),
+              SizedBox(width: 8),
+              Text('Pengaturan Pajak'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // PB1 toggle
+                _TaxToggleRow(
+                  label: 'PB1 (Pajak Restoran)',
+                  sublabel: 'Pajak daerah untuk restoran/kafe',
+                  enabled: tax.pb1Enabled,
+                  rate: tax.pb1Rate,
+                  onToggle: (v) => tax.setPb1Enabled(v),
+                  onRateChanged: (v) => tax.setPb1Rate(v),
+                ),
+                const Divider(height: 24),
+                // PPN toggle
+                _TaxToggleRow(
+                  label: 'PPN (Pajak Pertambahan Nilai)',
+                  sublabel: 'Pajak nasional',
+                  enabled: tax.ppnEnabled,
+                  rate: tax.ppnRate,
+                  onToggle: (v) => tax.setPpnEnabled(v),
+                  onRateChanged: (v) => tax.setPpnRate(v),
+                ),
+                const SizedBox(height: 16),
+                // Preview
+                if (tax.hasTaxEnabled) _TaxPreview(tax: tax),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('TUTUP'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TaxToggleRow extends StatelessWidget {
+  final String label;
+  final String sublabel;
+  final bool enabled;
+  final double rate;
+  final ValueChanged<bool> onToggle;
+  final ValueChanged<double> onRateChanged;
+
+  const _TaxToggleRow({
+    required this.label,
+    required this.sublabel,
+    required this.enabled,
+    required this.rate,
+    required this.onToggle,
+    required this.onRateChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          subtitle: Text(sublabel, style: const TextStyle(fontSize: 12)),
+          value: enabled,
+          onChanged: onToggle,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 4),
+            child: Row(
+              children: [
+                const Text('Tarif: ', style: TextStyle(fontSize: 13)),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: TextEditingController(text: rate.toStringAsFixed(0)),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      suffixText: '%',
+                      border: OutlineInputBorder(),
+                    ),
+                    style: const TextStyle(fontSize: 14),
+                    onSubmitted: (v) {
+                      final parsed = double.tryParse(v);
+                      if (parsed != null && parsed >= 0 && parsed <= 100) {
+                        onRateChanged(parsed);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TaxPreview extends StatelessWidget {
+  final TaxProvider tax;
+
+  const _TaxPreview({required this.tax});
+
+  @override
+  Widget build(BuildContext context) {
+    // Example calculation with 100k subtotal
+    final example = tax.calculate(100000);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Contoh (Subtotal Rp 100.000):',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (example.pb1Amount > 0)
+            _previewLine(context, 'PB1', example.pb1Amount),
+          if (example.ppnAmount > 0)
+            _previewLine(context, 'PPN', example.ppnAmount),
+          const Divider(height: 8),
+          _previewLine(context, 'Total', example.grandTotal, bold: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewLine(BuildContext context, String label, double amount, {bool bold = false}) {
+    final formatted = amount.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text('Rp $formatted', style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
+    );
   }
 }
 
