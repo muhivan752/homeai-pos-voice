@@ -28,6 +28,8 @@ class VoiceProvider extends ChangeNotifier {
   bool _isAvailable = false;
   double _lastConfidence = 0.0;
   bool _hasIdLocale = false;
+  String? _bestLocaleId; // best Indonesian locale found (id_ID, in_ID, or null)
+  bool _showedLocaleWarning = false;
 
   // For auto-stop: stored so _onStatus can auto-process
   CartProvider? _activeCart;
@@ -40,6 +42,7 @@ class VoiceProvider extends ChangeNotifier {
   String get statusMessage => _statusMessage;
   bool get isListening => _status == VoiceStatus.listening;
   bool get isAvailable => _isAvailable;
+  bool get hasIdLocale => _hasIdLocale;
 
   /// Common English words that indicate wrong language detection.
   static const _englishIndicators = [
@@ -67,9 +70,30 @@ class VoiceProvider extends ChangeNotifier {
       if (_isAvailable) {
         try {
           final locales = await _speech.locales();
-          _hasIdLocale = locales.any(
-            (l) => l.localeId.startsWith('id') || l.localeId.startsWith('in'),
-          );
+          // Try to find the best Indonesian locale
+          // Priority: id_ID > in_ID > id > in > null
+          for (final locale in locales) {
+            final lid = locale.localeId;
+            if (lid == 'id_ID' || lid == 'id-ID') {
+              _bestLocaleId = lid;
+              _hasIdLocale = true;
+              break;
+            }
+            if (lid == 'in_ID' || lid == 'in-ID') {
+              _bestLocaleId = lid;
+              _hasIdLocale = true;
+              // Don't break — keep looking for id_ID
+            }
+            if (_bestLocaleId == null && (lid.startsWith('id') || lid.startsWith('in'))) {
+              _bestLocaleId = lid;
+              _hasIdLocale = true;
+            }
+          }
+          if (_bestLocaleId != null) {
+            debugPrint('[POS Voice] Indonesian locale found: $_bestLocaleId');
+          } else {
+            debugPrint('[POS Voice] No Indonesian locale — will use device default');
+          }
         } catch (_) {
           _hasIdLocale = false;
         }
@@ -130,23 +154,33 @@ class VoiceProvider extends ChangeNotifier {
   void _onError(dynamic error) {
     _status = VoiceStatus.error;
     _activeCart = null;
+    _activeCustomer = null;
     _activeTax = null;
     _manualStop = false;
 
     final msg = error.errorMsg?.toString() ?? '';
+    debugPrint('[POS Voice] STT error: $msg');
     if (msg.contains('error_no_match')) {
-      _statusMessage = 'Gak kedengeran nih. Coba lagi atau ketik aja!';
+      _statusMessage = 'Gak kedengeran nih. Coba dekatkan ke mulut atau ketik aja!';
     } else if (msg.contains('error_speech_timeout')) {
-      _statusMessage = 'Kelamaan diem nih. Coba lagi?';
+      _statusMessage = 'Kelamaan diem nih. Tekan mic lalu langsung ngomong ya!';
+    } else if (msg.contains('error_audio')) {
+      _statusMessage = 'Mic bermasalah. Cek permission mic di Settings, atau ketik aja!';
+    } else if (msg.contains('error_network')) {
+      _statusMessage = 'Perlu internet untuk voice. Cek koneksi atau pakai ketik!';
+    } else if (msg.contains('error_permission') || msg.contains('error_not_allowed')) {
+      _statusMessage = 'Izin mic belum diberikan. Buka Settings > Permissions > Microphone';
     } else {
-      _statusMessage = 'Voice error, coba ketik aja ya!';
+      _statusMessage = 'Voice error ($msg). Coba ketik aja ya!';
     }
     notifyListeners();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      _status = VoiceStatus.idle;
-      _statusMessage = 'Tekan mic atau ketik perintah';
-      notifyListeners();
+    Future.delayed(const Duration(seconds: 4), () {
+      if (_status == VoiceStatus.error) {
+        _status = VoiceStatus.idle;
+        _statusMessage = 'Tekan mic atau ketik perintah';
+        notifyListeners();
+      }
     });
   }
 
@@ -169,10 +203,18 @@ class VoiceProvider extends ChangeNotifier {
     _activeCustomer = customerProvider;
     _activeTax = taxProvider;
     _status = VoiceStatus.listening;
-    _statusMessage = 'Ngomong aja, gak perlu tekan stop...';
+
+    // Show locale warning once if Indonesian not found
+    if (!_hasIdLocale && !_showedLocaleWarning) {
+      _showedLocaleWarning = true;
+      _statusMessage = 'Bahasa Indonesia belum terinstall — voice tetap jalan, tapi mungkin kurang akurat. '
+          'Install di Settings > System > Languages & input > Speech';
+    } else {
+      _statusMessage = 'Ngomong aja, gak perlu tekan stop...';
+    }
     notifyListeners();
 
-    final localeId = _hasIdLocale ? 'id_ID' : null;
+    final localeId = _bestLocaleId;
 
     try {
       await _speech.listen(
@@ -195,6 +237,8 @@ class VoiceProvider extends ChangeNotifier {
       } catch (_) {
         _status = VoiceStatus.error;
         _activeCart = null;
+        _activeCustomer = null;
+        _activeTax = null;
         _statusMessage = 'Voice gagal start. Coba ketik aja!';
         notifyListeners();
       }
@@ -215,6 +259,7 @@ class VoiceProvider extends ChangeNotifier {
   Future<void> stopListening() async {
     _manualStop = true;
     _activeCart = null;
+    _activeCustomer = null;
     _activeTax = null;
     await _speech.stop();
     _status = VoiceStatus.idle;

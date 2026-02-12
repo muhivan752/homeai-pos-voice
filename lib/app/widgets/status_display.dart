@@ -21,14 +21,22 @@ class StatusDisplay extends StatelessWidget {
             voiceMsg != 'Siap! Tekan mic atau ketik perintah' &&
             voiceMsg != 'Bentar ya...' &&
             voiceMsg != 'Ngomong aja, gak perlu tekan stop...' &&
-            voiceMsg != 'Dengerin nih...';
+            voiceMsg != 'Dengerin nih...' &&
+            !voiceMsg.startsWith('Bahasa Indonesia belum');
 
         Color bgColor;
         Color textColor;
         IconData icon;
         String message;
 
-        if (isListening) {
+        final isLocaleWarning = voiceMsg.startsWith('Bahasa Indonesia belum');
+
+        if (isLocaleWarning) {
+          bgColor = Colors.orange.shade50;
+          textColor = Colors.orange.shade800;
+          icon = Icons.warning_amber;
+          message = voiceMsg;
+        } else if (isListening) {
           bgColor = Theme.of(context).colorScheme.error.withOpacity(0.1);
           textColor = Theme.of(context).colorScheme.error;
           icon = Icons.mic;
