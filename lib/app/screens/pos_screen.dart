@@ -19,6 +19,7 @@ import 'history_screen.dart';
 import 'menu_management_screen.dart';
 import 'payment_screen.dart';
 import 'receipt_screen.dart';
+import 'report_screen.dart';
 import 'login_screen.dart';
 
 class PosScreen extends StatefulWidget {
@@ -35,9 +36,38 @@ class _PosScreenState extends State<PosScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<VoiceProvider>().initialize();
+      final voice = context.read<VoiceProvider>();
+      voice.initialize();
+      voice.addListener(_onVoiceChanged);
       _erpService.init();
     });
+  }
+
+  @override
+  void dispose() {
+    // Remove listener safely — provider may already be disposed
+    try {
+      context.read<VoiceProvider>().removeListener(_onVoiceChanged);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  /// Navigate to receipt screen when voice checkout completes.
+  void _onVoiceChanged() {
+    final voice = context.read<VoiceProvider>();
+    final txId = voice.pendingReceiptTxId;
+    if (txId != null) {
+      voice.clearPendingReceipt();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ReceiptScreen(
+            transactionId: txId,
+            isPostCheckout: true,
+          ),
+        ),
+      );
+    }
   }
 
   void _showCart() {
@@ -183,6 +213,16 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReportScreen()),
+              );
+            },
+            tooltip: 'Laporan',
+          ),
+          IconButton(
             icon: const Icon(Icons.history),
             onPressed: () {
               Navigator.push(
@@ -190,7 +230,7 @@ class _PosScreenState extends State<PosScreen> {
                 MaterialPageRoute(builder: (_) => const HistoryScreen()),
               );
             },
-            tooltip: 'Riwayat Transaksi',
+            tooltip: 'Riwayat',
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -418,6 +458,14 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 );
               }
+            } else if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Gagal menyimpan transaksi. Coba lagi.'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             }
           },
         ),
@@ -623,6 +671,19 @@ class SettingsSheet extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              );
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.analytics,
+            iconColor: Colors.deepPurple,
+            title: 'Laporan Penjualan',
+            subtitle: 'Harian, mingguan, bulanan + pajak',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReportScreen()),
               );
             },
           ),

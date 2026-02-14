@@ -35,7 +35,12 @@ class VoiceProvider extends ChangeNotifier {
   CartProvider? _activeCart;
   CustomerProvider? _activeCustomer;
   TaxProvider? _activeTax;
+  String? _activeCashierId;
+  String? _activeCashierName;
   bool _manualStop = false;
+
+  // Set after successful voice checkout — PosScreen listens and navigates
+  String? _pendingReceiptTxId;
 
   VoiceStatus get status => _status;
   String get lastWords => _lastWords;
@@ -43,6 +48,11 @@ class VoiceProvider extends ChangeNotifier {
   bool get isListening => _status == VoiceStatus.listening;
   bool get isAvailable => _isAvailable;
   bool get hasIdLocale => _hasIdLocale;
+  String? get pendingReceiptTxId => _pendingReceiptTxId;
+
+  void clearPendingReceipt() {
+    _pendingReceiptTxId = null;
+  }
 
   /// Common English words that indicate wrong language detection.
   static const _englishIndicators = [
@@ -132,11 +142,15 @@ class VoiceProvider extends ChangeNotifier {
             final cart = _activeCart;
             final customer = _activeCustomer;
             final tax = _activeTax;
+            final cId = _activeCashierId;
+            final cName = _activeCashierName;
             _activeCart = null;
             _activeCustomer = null;
             _activeTax = null;
+            _activeCashierId = null;
+            _activeCashierName = null;
             if (text.isNotEmpty && cart != null) {
-              processText(text, cart, customerProvider: customer, taxProvider: tax);
+              processText(text, cart, customerProvider: customer, taxProvider: tax, cashierId: cId, cashierName: cName);
             }
           });
         } else {
@@ -145,6 +159,8 @@ class VoiceProvider extends ChangeNotifier {
           _activeCart = null;
           _activeCustomer = null;
           _activeTax = null;
+          _activeCashierId = null;
+          _activeCashierName = null;
           notifyListeners();
         }
       }
@@ -156,6 +172,8 @@ class VoiceProvider extends ChangeNotifier {
     _activeCart = null;
     _activeCustomer = null;
     _activeTax = null;
+    _activeCashierId = null;
+    _activeCashierName = null;
     _manualStop = false;
 
     final msg = error.errorMsg?.toString() ?? '';
@@ -185,7 +203,7 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   /// Start listening. Pass providers so auto-stop can process.
-  Future<void> startListening(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
+  Future<void> startListening(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider, String? cashierId, String? cashierName}) async {
     if (!_isAvailable) {
       await initialize();
     }
@@ -202,6 +220,8 @@ class VoiceProvider extends ChangeNotifier {
     _activeCart = cartProvider;
     _activeCustomer = customerProvider;
     _activeTax = taxProvider;
+    _activeCashierId = cashierId;
+    _activeCashierName = cashierName;
     _status = VoiceStatus.listening;
 
     // Show locale warning once if Indonesian not found
@@ -261,12 +281,14 @@ class VoiceProvider extends ChangeNotifier {
     _activeCart = null;
     _activeCustomer = null;
     _activeTax = null;
+    _activeCashierId = null;
+    _activeCashierName = null;
     await _speech.stop();
     _status = VoiceStatus.idle;
     notifyListeners();
   }
 
-  Future<void> processCommand(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
+  Future<void> processCommand(CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider, String? cashierId, String? cashierName}) async {
     if (_lastWords.isEmpty) {
       _statusMessage = 'Gak kedengeran nih, coba lagi atau ketik aja!';
       _status = VoiceStatus.idle;
@@ -288,7 +310,7 @@ class VoiceProvider extends ChangeNotifier {
         return;
       }
 
-      final result = await _executeBarista(_lastWords, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider);
+      final result = await _executeBarista(_lastWords, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider, cashierId: cashierId, cashierName: cashierName);
       debugPrint('[POS Voice] Result: $result');
       _statusMessage = result;
     } catch (e, stackTrace) {
@@ -335,7 +357,7 @@ class VoiceProvider extends ChangeNotifier {
     return englishHits >= 3;
   }
 
-  Future<String> _executeBarista(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
+  Future<String> _executeBarista(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider, String? cashierId, String? cashierName}) async {
     // Run STT corrector BEFORE parsing
     final corrected = _corrector.correct(text);
     debugPrint('[POS Voice] Original: "$text" → Corrected: "$corrected"');
@@ -374,6 +396,8 @@ class VoiceProvider extends ChangeNotifier {
               paymentMethod: result.paymentMethod!,
               customerName: customerProvider?.customerName,
               customerId: customerProvider?.activeCustomer?.id,
+              cashierId: cashierId,
+              cashierName: cashierName,
               subtotal: subtotal,
               taxPb1: tax?.pb1Amount ?? 0,
               taxPpn: tax?.ppnAmount ?? 0,
@@ -381,6 +405,10 @@ class VoiceProvider extends ChangeNotifier {
             // Record customer visit after successful checkout
             if (txId != null && customerProvider?.hasCustomer == true) {
               await customerProvider!.recordVisit(txId);
+            }
+            // Set pending receipt so PosScreen can navigate
+            if (txId != null) {
+              _pendingReceiptTxId = txId;
             }
           }
         }
@@ -442,14 +470,14 @@ class VoiceProvider extends ChangeNotifier {
   }
 
   /// Process a text command directly (for text input or auto-stop).
-  Future<String> processText(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider}) async {
+  Future<String> processText(String text, CartProvider cartProvider, {CustomerProvider? customerProvider, TaxProvider? taxProvider, String? cashierId, String? cashierName}) async {
     _lastWords = text;
     _status = VoiceStatus.processing;
     notifyListeners();
 
     try {
       debugPrint('[POS Voice] Processing text: "$text"');
-      final result = await _executeBarista(text, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider);
+      final result = await _executeBarista(text, cartProvider, customerProvider: customerProvider, taxProvider: taxProvider, cashierId: cashierId, cashierName: cashierName);
       debugPrint('[POS Voice] Result: $result');
       _statusMessage = result;
       return result;
@@ -471,6 +499,9 @@ class VoiceProvider extends ChangeNotifier {
     _activeCart = null;
     _activeCustomer = null;
     _activeTax = null;
+    _activeCashierId = null;
+    _activeCashierName = null;
+    _pendingReceiptTxId = null;
     _manualStop = false;
     _parser.clearContext();
     notifyListeners();

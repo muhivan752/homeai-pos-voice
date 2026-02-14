@@ -594,6 +594,85 @@ class DatabaseHelper {
     return result.first;
   }
 
+  /// Sales report for a date range.
+  Future<Map<String, dynamic>> getSalesReport({
+    required String startDate,
+    required String endDate,
+  }) async {
+    final db = await database;
+
+    // Summary stats
+    final summary = await db.rawQuery('''
+      SELECT
+        COUNT(*) as transaction_count,
+        COALESCE(SUM(total), 0) as total_sales,
+        COALESCE(SUM(subtotal), 0) as total_subtotal,
+        COALESCE(SUM(tax_pb1), 0) as total_pb1,
+        COALESCE(SUM(tax_ppn), 0) as total_ppn,
+        COALESCE(AVG(total), 0) as avg_transaction
+      FROM transactions
+      WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+    ''', [startDate, endDate]);
+
+    // Payment method breakdown
+    final paymentBreakdown = await db.rawQuery('''
+      SELECT
+        payment_method,
+        COUNT(*) as count,
+        COALESCE(SUM(total), 0) as total
+      FROM transactions
+      WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+      GROUP BY payment_method
+      ORDER BY total DESC
+    ''', [startDate, endDate]);
+
+    // Top products
+    final topProducts = await db.rawQuery('''
+      SELECT
+        ti.product_name,
+        SUM(ti.quantity) as total_qty,
+        SUM(ti.subtotal) as total_revenue
+      FROM transaction_items ti
+      INNER JOIN transactions t ON t.id = ti.transaction_id
+      WHERE DATE(t.created_at) >= ? AND DATE(t.created_at) <= ?
+      GROUP BY ti.product_name
+      ORDER BY total_qty DESC
+      LIMIT 10
+    ''', [startDate, endDate]);
+
+    // Hourly breakdown (for daily reports)
+    final hourly = await db.rawQuery('''
+      SELECT
+        CAST(strftime('%H', created_at) AS INTEGER) as hour,
+        COUNT(*) as count,
+        COALESCE(SUM(total), 0) as total
+      FROM transactions
+      WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+      GROUP BY hour
+      ORDER BY hour
+    ''', [startDate, endDate]);
+
+    // Daily breakdown (for multi-day reports)
+    final daily = await db.rawQuery('''
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as count,
+        COALESCE(SUM(total), 0) as total
+      FROM transactions
+      WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+      GROUP BY date
+      ORDER BY date
+    ''', [startDate, endDate]);
+
+    return {
+      'summary': summary.first,
+      'payment_breakdown': paymentBreakdown,
+      'top_products': topProducts,
+      'hourly': hourly,
+      'daily': daily,
+    };
+  }
+
   // ============ CUSTOMERS ============
 
   Future<int> insertCustomer(Map<String, dynamic> customer) async {
