@@ -18,6 +18,7 @@ import '../widgets/product_search.dart';
 import 'history_screen.dart';
 import 'menu_management_screen.dart';
 import 'payment_screen.dart';
+import 'receipt_screen.dart';
 import 'login_screen.dart';
 
 class PosScreen extends StatefulWidget {
@@ -381,27 +382,6 @@ class _PosScreenState extends State<PosScreen> {
           onPaymentComplete: (result) async {
             Navigator.pop(context);
 
-            // Show processing indicator
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Text('Memproses transaksi...'),
-                  ],
-                ),
-                duration: Duration(seconds: 1),
-              ),
-            );
-
             // Get customer info if available
             final customerProv = context.read<CustomerProvider>();
 
@@ -426,34 +406,18 @@ class _PosScreenState extends State<PosScreen> {
             }
 
             if (transactionId != null) {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.white),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Transaksi berhasil!'),
-                            if (result.method == 'cash' && result.change > 0)
-                              Text(
-                                'Kembalian: Rp ${_formatCurrency(result.change)}',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+              // Navigate to receipt screen
+              if (context.mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReceiptScreen(
+                      transactionId: transactionId,
+                      isPostCheckout: true,
+                    ),
                   ),
-                  backgroundColor: Colors.green.shade600,
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+                );
+              }
             }
           },
         ),

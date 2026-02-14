@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database/database_helper.dart';
 import '../services/sync_service.dart';
+import 'receipt_screen.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final String transactionId;
@@ -64,13 +65,19 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       );
     }
 
+    final subtotal = (_transaction!['subtotal'] ?? _transaction!['total'] ?? 0).toDouble();
+    final taxPb1 = (_transaction!['tax_pb1'] ?? 0).toDouble();
+    final taxPpn = (_transaction!['tax_ppn'] ?? 0).toDouble();
     final total = (_transaction!['total'] ?? 0).toDouble();
     final syncStatus = _transaction!['sync_status'] ?? 'pending';
     final createdAt = DateTime.tryParse(_transaction!['created_at'] ?? '');
     final customerName = _transaction!['customer_name'] ?? 'Walk-in Customer';
     final paymentMethod = _transaction!['payment_method'] ?? 'Cash';
+    final paymentAmount = (_transaction!['payment_amount'] ?? total).toDouble();
+    final changeAmount = (_transaction!['change_amount'] ?? 0).toDouble();
     final erpInvoiceId = _transaction!['erp_invoice_id'];
     final syncError = _transaction!['sync_error'];
+    final hasTax = taxPb1 > 0 || taxPpn > 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,6 +182,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         _ItemRow(item: _items[i]),
                       ],
                       const Divider(thickness: 2),
+                      if (hasTax) ...[
+                        _SummaryRow(label: 'Subtotal', amount: subtotal),
+                        if (taxPb1 > 0) _SummaryRow(label: 'PB1', amount: taxPb1),
+                        if (taxPpn > 0) _SummaryRow(label: 'PPN', amount: taxPpn),
+                        const Divider(),
+                      ],
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Row(
@@ -198,6 +211,20 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                           ],
                         ),
                       ),
+                      // Payment details
+                      if (paymentAmount > 0) ...[
+                        const Divider(),
+                        _SummaryRow(
+                          label: 'Bayar (${paymentMethod})',
+                          amount: paymentAmount,
+                        ),
+                        if (changeAmount > 0)
+                          _SummaryRow(
+                            label: 'Kembali',
+                            amount: changeAmount,
+                            color: Colors.green.shade700,
+                          ),
+                      ],
                     ],
                   ),
 
@@ -236,28 +263,54 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Share Receipt Button
+                  // View Receipt Button
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _shareReceipt,
-                      icon: const Icon(Icons.share),
-                      label: const Text('Share Struk'),
-                      style: OutlinedButton.styleFrom(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReceiptScreen(
+                              transactionId: widget.transactionId,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.receipt),
+                      label: const Text('Lihat Struk'),
+                      style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
                   ),
 
-                  // Copy Receipt Button
+                  // Share Receipt Button
                   const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: _copyReceipt,
-                      icon: const Icon(Icons.copy, size: 18),
-                      label: const Text('Copy Struk'),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _shareReceipt,
+                          icon: const Icon(Icons.share, size: 18),
+                          label: const Text('Share'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _copyReceipt,
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Copy'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -269,10 +322,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   String _generateReceipt() {
-    final total = (_transaction!['total'] ?? 0).toDouble();
-    final createdAt = DateTime.tryParse(_transaction!['created_at'] ?? '');
-    final customerName = _transaction!['customer_name'] ?? 'Walk-in Customer';
-    final paymentMethod = _transaction!['payment_method'] ?? 'Cash';
+    final tx = _transaction!;
+    final itemSubtotal = (tx['subtotal'] ?? tx['total'] ?? 0).toDouble();
+    final taxPb1 = (tx['tax_pb1'] ?? 0).toDouble();
+    final taxPpn = (tx['tax_ppn'] ?? 0).toDouble();
+    final total = (tx['total'] ?? 0).toDouble();
+    final createdAt = DateTime.tryParse(tx['created_at'] ?? '');
+    final customerName = tx['customer_name'] ?? 'Walk-in Customer';
+    final paymentMethod = tx['payment_method'] ?? 'Cash';
+    final paymentAmount = (tx['payment_amount'] ?? total).toDouble();
+    final changeAmount = (tx['change_amount'] ?? 0).toDouble();
 
     final buffer = StringBuffer();
 
@@ -283,22 +342,31 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     buffer.writeln('Tanggal: ${createdAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(createdAt) : '-'}');
     buffer.writeln('Customer: $customerName');
     buffer.writeln('--------------------------------');
-    buffer.writeln('');
 
     for (final item in _items) {
       final name = item['product_name'] ?? '-';
       final qty = item['quantity'] ?? 0;
       final price = (item['price'] ?? 0).toDouble();
-      final subtotal = (item['subtotal'] ?? 0).toDouble();
-
+      final sub = (item['subtotal'] ?? 0).toDouble();
       buffer.writeln('$name');
-      buffer.writeln('  $qty x Rp ${_formatCurrency(price)} = Rp ${_formatCurrency(subtotal)}');
+      buffer.writeln('  $qty x Rp ${_formatCurrency(price)} = Rp ${_formatCurrency(sub)}');
     }
 
-    buffer.writeln('');
     buffer.writeln('--------------------------------');
-    buffer.writeln('TOTAL: Rp ${_formatCurrency(total)}');
-    buffer.writeln('Bayar: $paymentMethod');
+    final hasTax = taxPb1 > 0 || taxPpn > 0;
+    if (hasTax) {
+      buffer.writeln('Subtotal: Rp ${_formatCurrency(itemSubtotal)}');
+      if (taxPb1 > 0) buffer.writeln('PB1:      Rp ${_formatCurrency(taxPb1)}');
+      if (taxPpn > 0) buffer.writeln('PPN:      Rp ${_formatCurrency(taxPpn)}');
+      buffer.writeln('--------------------------------');
+    }
+    buffer.writeln('TOTAL:    Rp ${_formatCurrency(total)}');
+    buffer.writeln('');
+    buffer.writeln('Bayar ($paymentMethod):');
+    buffer.writeln('          Rp ${_formatCurrency(paymentAmount)}');
+    if (changeAmount > 0) {
+      buffer.writeln('Kembali:  Rp ${_formatCurrency(changeAmount)}');
+    }
     buffer.writeln('--------------------------------');
     buffer.writeln('');
     buffer.writeln('    Terima kasih!');
@@ -498,6 +566,50 @@ class _ItemRow extends StatelessWidget {
     return amount.toStringAsFixed(0).replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (Match m) => '${m[1]}.',
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final double amount;
+  final Color? color;
+
+  const _SummaryRow({
+    required this.label,
+    required this.amount,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted = amount.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            'Rp $formatted',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
