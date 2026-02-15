@@ -5,14 +5,11 @@ import '../providers/voice_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/customer_provider.dart';
 import '../providers/tax_provider.dart';
-import '../services/erp_service.dart';
-import '../services/sync_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/cart_list.dart';
 import '../widgets/voice_button.dart';
 import '../widgets/status_display.dart';
 import '../widgets/product_grid.dart';
-import '../widgets/sync_indicator.dart';
 import '../widgets/barcode_scanner.dart';
 import '../widgets/product_search.dart';
 import 'history_screen.dart';
@@ -30,8 +27,6 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  final _erpService = ErpService();
-
   @override
   void initState() {
     super.initState();
@@ -39,7 +34,6 @@ class _PosScreenState extends State<PosScreen> {
       final voice = context.read<VoiceProvider>();
       voice.initialize();
       voice.addListener(_onVoiceChanged);
-      _erpService.init();
     });
   }
 
@@ -243,9 +237,6 @@ class _PosScreenState extends State<PosScreen> {
           children: [
             // Status Display
             const StatusDisplay(),
-
-            // Sync Indicator
-            const SyncIndicator(),
 
             // Search and Scan buttons
             Padding(
@@ -476,10 +467,17 @@ class _PosScreenState extends State<PosScreen> {
   void _showSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SettingsSheet(erpService: _erpService),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => const SettingsSheet(),
+      ),
     );
   }
 
@@ -558,15 +556,13 @@ class CartBottomSheet extends StatelessWidget {
 }
 
 class SettingsSheet extends StatelessWidget {
-  final ErpService erpService;
-
-  const SettingsSheet({super.key, required this.erpService});
+  const SettingsSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
     final authService = context.watch<AuthService>();
 
-    return Container(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -627,7 +623,7 @@ class SettingsSheet extends StatelessWidget {
             icon: Icons.restaurant_menu,
             iconColor: Colors.deepPurple,
             title: 'Kelola Menu',
-            subtitle: 'Tambah, edit, hapus produk',
+            subtitle: 'Tambah, edit, hapus produk + stok',
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -644,21 +640,6 @@ class SettingsSheet extends StatelessWidget {
             onTap: () {
               Navigator.pop(context);
               _showTaxSettings(context);
-            },
-          ),
-          _SettingsTile(
-            icon: Icons.cloud_outlined,
-            iconColor: Colors.blue,
-            title: 'ERPNext Server',
-            subtitle: erpService.isConfigured
-                ? erpService.baseUrl ?? 'Terkonfigurasi'
-                : 'Belum dikonfigurasi',
-            onTap: () {
-              Navigator.pop(context);
-              showDialog(
-                context: context,
-                builder: (context) => ErpSettingsDialog(erpService: erpService),
-              );
             },
           ),
           _SettingsTile(
@@ -685,16 +666,6 @@ class SettingsSheet extends StatelessWidget {
                 context,
                 MaterialPageRoute(builder: (_) => const ReportScreen()),
               );
-            },
-          ),
-          _SettingsTile(
-            icon: Icons.sync,
-            iconColor: Colors.orange,
-            title: 'Sinkronisasi Produk',
-            subtitle: 'Ambil produk dari ERPNext',
-            onTap: () {
-              Navigator.pop(context);
-              _syncProducts(context);
             },
           ),
           _SettingsTile(
@@ -745,40 +716,6 @@ class SettingsSheet extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _syncProducts(BuildContext context) async {
-    if (!erpService.isConfigured) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Konfigurasi ERPNext terlebih dahulu'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Mengambil produk dari ERPNext...')),
-    );
-
-    final result = await erpService.getProducts();
-
-    if (result.isSuccess) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Berhasil mengambil ${result.data!.length} produk'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.errorMessage ?? 'Gagal mengambil produk'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   String _taxSubtitle(BuildContext context) {
@@ -1017,167 +954,3 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
-class ErpSettingsDialog extends StatefulWidget {
-  final ErpService erpService;
-
-  const ErpSettingsDialog({super.key, required this.erpService});
-
-  @override
-  State<ErpSettingsDialog> createState() => _ErpSettingsDialogState();
-}
-
-class _ErpSettingsDialogState extends State<ErpSettingsDialog> {
-  final _urlController = TextEditingController();
-  final _apiKeyController = TextEditingController();
-  final _apiSecretController = TextEditingController();
-  bool _isLoading = false;
-  bool _isTesting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _urlController.text = widget.erpService.baseUrl ?? '';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Row(
-        children: [
-          Icon(Icons.cloud, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('ERPNext Server'),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                labelText: 'Server URL',
-                hintText: 'https://erp.example.com',
-                prefixIcon: const Icon(Icons.link),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _apiKeyController,
-              decoration: InputDecoration(
-                labelText: 'API Key',
-                prefixIcon: const Icon(Icons.key),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _apiSecretController,
-              decoration: InputDecoration(
-                labelText: 'API Secret',
-                prefixIcon: const Icon(Icons.lock),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _isTesting ? null : _testConnection,
-                icon: _isTesting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.wifi_find),
-                label: Text(_isTesting ? 'Mengecek...' : 'Test Koneksi'),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('BATAL'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _saveSettings,
-          child: _isLoading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('SIMPAN'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _testConnection() async {
-    setState(() => _isTesting = true);
-
-    // Save temporarily for testing
-    await widget.erpService.saveConfig(
-      url: _urlController.text.trim(),
-      apiKey: _apiKeyController.text.trim(),
-      apiSecret: _apiSecretController.text.trim(),
-    );
-
-    final result = await widget.erpService.testConnection();
-
-    setState(() => _isTesting = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.isSuccess ? 'Koneksi berhasil!' : result.errorMessage!,
-          ),
-          backgroundColor: result.isSuccess ? Colors.green : Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _saveSettings() async {
-    setState(() => _isLoading = true);
-
-    await widget.erpService.saveConfig(
-      url: _urlController.text.trim(),
-      apiKey: _apiKeyController.text.trim(),
-      apiSecret: _apiSecretController.text.trim(),
-    );
-
-    setState(() => _isLoading = false);
-
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pengaturan disimpan'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _apiKeyController.dispose();
-    _apiSecretController.dispose();
-    super.dispose();
-  }
-}
