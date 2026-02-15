@@ -251,16 +251,48 @@ class _ProductTile extends StatelessWidget {
           product.name,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        subtitle: Text(
-          product.aliases.isNotEmpty
-              ? product.aliases.take(3).join(', ')
-              : 'Tanpa alias',
-          style: TextStyle(
-            fontSize: 12,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        subtitle: Row(
+          children: [
+            Expanded(
+              child: Text(
+                product.aliases.isNotEmpty
+                    ? product.aliases.take(3).join(', ')
+                    : 'Tanpa alias',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (product.isStockTracked)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: product.isOutOfStock
+                      ? Colors.red.withOpacity(0.1)
+                      : product.isLowStock
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  product.isOutOfStock
+                      ? 'Habis'
+                      : 'Stok: ${product.stock}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: product.isOutOfStock
+                        ? Colors.red
+                        : product.isLowStock
+                            ? Colors.orange.shade700
+                            : Colors.green.shade700,
+                  ),
+                ),
+              ),
+          ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -328,7 +360,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   late TextEditingController _priceController;
   late TextEditingController _aliasController;
   late TextEditingController _barcodeController;
+  late TextEditingController _stockController;
   String _selectedCategory = 'drink';
+  bool _trackStock = false;
   bool _isSaving = false;
 
   bool get isEditing => widget.product != null;
@@ -345,6 +379,10 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       text: p?.aliases.join(', ') ?? '',
     );
     _barcodeController = TextEditingController(text: p?.barcode ?? '');
+    _trackStock = p != null && p.isStockTracked;
+    _stockController = TextEditingController(
+      text: _trackStock ? p!.stock.toString() : '',
+    );
     _selectedCategory = p?.category ?? 'drink';
   }
 
@@ -354,6 +392,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _priceController.dispose();
     _aliasController.dispose();
     _barcodeController.dispose();
+    _stockController.dispose();
     super.dispose();
   }
 
@@ -505,6 +544,46 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Stock tracking
+                      Row(
+                        children: [
+                          const Icon(Icons.inventory, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Lacak Stok',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                          const Spacer(),
+                          Switch(
+                            value: _trackStock,
+                            onChanged: (v) => setState(() => _trackStock = v),
+                          ),
+                        ],
+                      ),
+                      if (_trackStock) ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _stockController,
+                          decoration: InputDecoration(
+                            labelText: 'Jumlah Stok',
+                            hintText: 'Contoh: 50',
+                            prefixIcon: const Icon(Icons.inventory_2),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (v) {
+                            if (!_trackStock) return null;
+                            if (v == null || v.trim().isEmpty) return 'Jumlah stok wajib diisi';
+                            final stock = int.tryParse(v.trim());
+                            if (stock == null || stock < 0) return 'Stok harus 0 atau lebih';
+                            return null;
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
                       // Barcode
                       TextFormField(
                         controller: _barcodeController,
@@ -590,6 +669,10 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         aliases.insert(0, lowerName);
       }
 
+      final stock = _trackStock
+          ? int.parse(_stockController.text.trim())
+          : -1;
+
       final product = Product(
         id: id,
         name: name,
@@ -597,6 +680,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         category: _selectedCategory,
         aliases: aliases,
         barcode: barcode,
+        stock: stock,
       );
 
       await widget.onSave(product);

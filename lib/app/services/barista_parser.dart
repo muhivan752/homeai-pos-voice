@@ -12,6 +12,7 @@ enum BaristaIntent {
   askMenu,
   identifyCustomer,
   orderBiasa,
+  checkStock,
   unknown,
 }
 
@@ -158,6 +159,13 @@ class BaristaParser {
     'yg kemarin', 'yang tadi', 'yang sering',
   ];
 
+  /// Keywords for stock check
+  static const List<String> _stockKeywords = [
+    'cek stok', 'stok', 'stock', 'sisa', 'berapa sisa',
+    'masih ada', 'ada gak', 'ada nggak', 'habis belum',
+    'tersedia', 'available',
+  ];
+
   /// Payment method detection
   static const Map<String, String> _paymentKeywords = {
     'qris': 'QRIS',
@@ -218,7 +226,11 @@ class BaristaParser {
       );
     }
 
-    // 3. Check greetings (only if no name detected — pure greetings like "halo", "pagi")
+    // 3. Check stock inquiry ("cek stok kopi susu", "stok latte")
+    final stockResult = _parseStockCheck(lower, raw, products);
+    if (stockResult != null) return stockResult;
+
+    // 4. Check greetings (only if no name detected — pure greetings like "halo", "pagi")
     if (_matchesAny(lower, _greetingKeywords)) {
       return ParseResult(
         intent: BaristaIntent.greeting,
@@ -227,7 +239,7 @@ class BaristaParser {
       );
     }
 
-    // 4. Check thanks
+    // 5. Check thanks
     if (_matchesAny(lower, _thanksKeywords)) {
       return ParseResult(
         intent: BaristaIntent.thanks,
@@ -236,7 +248,7 @@ class BaristaParser {
       );
     }
 
-    // 5. Check menu inquiry
+    // 6. Check menu inquiry
     if (_matchesAny(lower, _menuKeywords)) {
       return ParseResult(
         intent: BaristaIntent.askMenu,
@@ -245,7 +257,7 @@ class BaristaParser {
       );
     }
 
-    // 6. Check clear cart (before checkout, since "batal semua" > "batal")
+    // 7. Check clear cart (before checkout, since "batal semua" > "batal")
     if (_matchesAny(lower, _clearKeywords)) {
       return ParseResult(
         intent: BaristaIntent.clearCart,
@@ -254,15 +266,15 @@ class BaristaParser {
       );
     }
 
-    // 7. Check checkout
+    // 8. Check checkout
     final checkoutResult = _parseCheckout(lower, raw);
     if (checkoutResult != null) return checkoutResult;
 
-    // 8. Check remove item
+    // 9. Check remove item
     final removeResult = _parseRemove(lower, raw, products);
     if (removeResult != null) return removeResult;
 
-    // 9. Check "lagi" / repeat last
+    // 10. Check "lagi" / repeat last
     if (_lastProduct != null && _matchesAny(lower, _repeatKeywords)) {
       final qty = _extractQuantity(lower);
       return ParseResult(
@@ -274,15 +286,15 @@ class BaristaParser {
       );
     }
 
-    // 10. Check add item (with keywords)
+    // 11. Check add item (with keywords)
     final addResult = _parseAddItem(lower, raw, products);
     if (addResult != null) return addResult;
 
-    // 11. Try direct product match (no keyword needed)
+    // 12. Try direct product match (no keyword needed)
     final directResult = _parseDirectProduct(lower, raw, products);
     if (directResult != null) return directResult;
 
-    // 12. Unknown
+    // 13. Unknown
     return ParseResult(
       intent: BaristaIntent.unknown,
       rawText: raw,
@@ -365,6 +377,20 @@ class BaristaParser {
       rawText: raw,
       confidence: 0.95,
       paymentMethod: payment,
+    );
+  }
+
+  ParseResult? _parseStockCheck(String lower, String raw, List<Product>? products) {
+    if (!_matchesAny(lower, _stockKeywords)) return null;
+
+    final cleaned = _stripKeywords(lower, _stockKeywords);
+    final product = _findProduct(cleaned, products);
+
+    return ParseResult(
+      intent: BaristaIntent.checkStock,
+      product: product,
+      rawText: raw,
+      confidence: product != null ? 0.9 : 0.7,
     );
   }
 

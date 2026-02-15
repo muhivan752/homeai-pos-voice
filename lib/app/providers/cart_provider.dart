@@ -167,6 +167,13 @@ class CartProvider extends ChangeNotifier {
       // Save to local database
       await _db.insertTransaction(transaction, transactionItems);
 
+      // Deduct stock for tracked products
+      final stockItems = _items.map((item) => {
+        'product_id': item.id,
+        'quantity': item.quantity,
+      }).toList();
+      await _db.deductStock(stockItems);
+
       // Clear cart
       final itemsCount = itemCount;
       _items.clear();

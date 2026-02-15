@@ -369,6 +369,11 @@ class VoiceProvider extends ChangeNotifier {
     switch (result.intent) {
       case BaristaIntent.addItem:
         if (result.product != null) {
+          // Check out-of-stock
+          if (result.product!.isOutOfStock) {
+            debugPrint('[POS Voice] ${result.product!.name} is out of stock');
+            return '${result.product!.name} lagi habis nih! Mau yang lain?';
+          }
           debugPrint('[POS Voice] Adding ${result.product!.name} x${result.quantity} to cart');
           cartProvider.addItem(result.product!, result.quantity);
           _parser.setLastProduct(result.product!);
@@ -447,6 +452,10 @@ class VoiceProvider extends ChangeNotifier {
             debugPrint('[POS Voice] Added biasa: ${product.name}');
           }
         }
+        break;
+
+      case BaristaIntent.checkStock:
+        // No action needed — response handles the message
         break;
 
       case BaristaIntent.greeting:

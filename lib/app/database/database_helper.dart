@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -51,6 +51,7 @@ class DatabaseHelper {
         category TEXT,
         aliases TEXT,
         image_url TEXT,
+        stock INTEGER DEFAULT -1,
         is_active INTEGER DEFAULT 1,
         synced_at TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -306,6 +307,14 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE transactions ADD COLUMN tax_ppn REAL DEFAULT 0');
       } catch (_) {}
     }
+
+    // Version 7: Stock management — inventory tracking
+    if (oldVersion < 7) {
+      try {
+        // stock = -1 means unlimited (not tracked), >= 0 means tracked
+        await db.execute('ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT -1');
+      } catch (_) {}
+    }
   }
 
   // ============ PRODUCTS ============
@@ -409,6 +418,47 @@ class DatabaseHelper {
       whereArgs: [category],
       orderBy: 'name',
     );
+  }
+
+  // ============ STOCK ============
+
+  /// Deduct stock for multiple items in a single transaction.
+  /// Only deducts for products with tracked stock (stock >= 0).
+  Future<void> deductStock(List<Map<String, dynamic>> items) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final item in items) {
+        final productId = item['product_id'] as String;
+        final qty = item['quantity'] as int;
+        // Only deduct if stock is tracked (>= 0)
+        await txn.rawUpdate('''
+          UPDATE products
+          SET stock = stock - ?
+          WHERE id = ? AND stock >= 0
+        ''', [qty, productId]);
+      }
+    });
+  }
+
+  /// Update stock for a single product.
+  Future<int> updateStock(String productId, int newStock) async {
+    final db = await database;
+    return await db.update(
+      'products',
+      {'stock': newStock},
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+  }
+
+  /// Get products with low stock (0 < stock <= threshold).
+  Future<List<Map<String, dynamic>>> getLowStockProducts({int threshold = 5}) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT * FROM products
+      WHERE is_active = 1 AND stock >= 0 AND stock <= ?
+      ORDER BY stock ASC
+    ''', [threshold]);
   }
 
   // ============ CATEGORIES ============

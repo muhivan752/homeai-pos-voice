@@ -103,6 +103,7 @@ class ProductProvider extends ChangeNotifier {
       'category': product.category,
       'aliases': product.aliases.join(','),
       'barcode': product.barcode,
+      'stock': product.stock,
     });
     await loadProducts();
   }
@@ -111,6 +112,41 @@ class ProductProvider extends ChangeNotifier {
   Future<void> deleteProduct(String id) async {
     await _db.deleteProduct(id);
     await loadProducts();
+  }
+
+  // ============ STOCK ============
+
+  /// Deduct stock after checkout. Reloads products to update UI.
+  Future<void> deductStock(List<Map<String, dynamic>> items) async {
+    await _db.deductStock(items);
+    await loadProducts();
+  }
+
+  /// Update stock for a single product.
+  Future<void> updateStock(String productId, int newStock) async {
+    await _db.updateStock(productId, newStock);
+    await loadProducts();
+  }
+
+  /// Get products with low stock.
+  Future<List<Product>> getLowStockProducts({int threshold = 5}) async {
+    final rows = await _db.getLowStockProducts(threshold: threshold);
+    return rows.map((r) => Product.fromMap(r)).toList();
+  }
+
+  /// Check if a product has enough stock for the requested quantity.
+  /// Returns true if stock is unlimited (-1) or sufficient.
+  bool hasEnoughStock(String productId, int requestedQty) {
+    final product = _products.where((p) => p.id == productId).firstOrNull;
+    if (product == null) return false;
+    if (!product.isStockTracked) return true; // unlimited
+    return product.stock >= requestedQty;
+  }
+
+  /// Get current stock for a product. Returns -1 if not tracked.
+  int getStock(String productId) {
+    final product = _products.where((p) => p.id == productId).firstOrNull;
+    return product?.stock ?? -1;
   }
 
   // ============ SEARCH ============

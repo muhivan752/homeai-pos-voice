@@ -63,7 +63,7 @@ VoiceInput / TouchInput
         ↓
   CartProvider / CustomerProvider (state update)
         ↓
-  SQLite (persist transaction)
+  SQLite (persist transaction + deduct stock)
         ↓
   SyncEngine → VPS API (background, auto-retry)
 ```
@@ -116,14 +116,10 @@ lib/
     │   └── barcode_scanner.dart          # Camera barcode/QR scanner
     │
     ├── database/
-    │   └── database_helper.dart          # SQLite manager (schema v6, migrations, CRUD)
+    │   └── database_helper.dart          # SQLite manager (schema v7, migrations, CRUD, stock)
     │
     └── theme/
         └── app_theme.dart                # Material Design 3 (light + dark)
-
-core/                                     # [LEGACY] Old non-Flutter implementation — tidak dipakai
-bin/
-  demo.dart                               # CLI demo mode (tanpa Flutter)
 ```
 
 ## Fitur Utama
@@ -164,12 +160,21 @@ bin/
 - **Categories:** drink, food, snack, other
 - **Fields:** Name, price, category, barcode, aliases (untuk voice matching)
 
-## Database Schema (SQLite v6)
+### 7. Stock/Inventory Management
+- **Stock tracking:** Per-produk, bisa on/off (stock = -1 artinya unlimited)
+- **Auto-deduct:** Stok otomatis berkurang saat checkout
+- **Out of stock:** Produk habis di-grey-out di grid, gak bisa ditambah ke cart
+- **Low stock warning:** Badge kuning kalau stok <= 5
+- **Voice check:** "cek stok kopi susu" → barista kasih tau sisa stok
+- **Restock:** Update stok via Menu Management (toggle lacak stok + set jumlah)
+- **Protection:** Voice command ditolak kalau produk habis ("X lagi habis nih!")
+
+## Database Schema (SQLite v7)
 
 | Table | Purpose |
 |-------|---------|
 | `users` | Cashier login (username, password_hash, name, role, is_active) |
-| `products` | Product catalog (item_code, name, price, category, aliases, barcode) |
+| `products` | Product catalog (item_code, name, price, category, aliases, barcode, **stock**) |
 | `categories` | Product categories (food, drink, snack, other) |
 | `transactions` | Sales orders (subtotal, taxes, total, payment_method, customer_id, sync_status) |
 | `transaction_items` | Order line items (product_id, quantity, price, subtotal) |
@@ -187,6 +192,7 @@ bin/
 | `clearCart` | "batal semua", "kosongkan" | Clear entire cart |
 | `identifyCustomer` | "gw Andi", "nama saya Budi" | Recognize/register customer |
 | `orderBiasa` | "yang biasa", "pesanan biasa" | Auto-add customer favorites |
+| `checkStock` | "cek stok kopi susu", "stok latte" | Check product stock |
 | `greeting` | "halo", "pagi" | Fun barista response |
 
 ## Auth System
@@ -233,7 +239,6 @@ flutter build apk --release
 
 ## Known Issues / Technical Debt
 
-- `lib/core/` — old non-Flutter implementation, masih ada tapi tidak dipakai
 - `erp_service.dart` + `sync_service.dart` — masih target ERPNext, perlu diganti ke VPS API
 - Voice login dihapus dari UI tapi parser masih support — cleanup needed
 - No test suite yet

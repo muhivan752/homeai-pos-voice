@@ -5,6 +5,7 @@ class Product {
   final String category;
   final List<String> aliases;
   final String? barcode;
+  final int stock; // -1 = unlimited (not tracked), >= 0 = tracked
 
   const Product({
     required this.id,
@@ -13,7 +14,17 @@ class Product {
     required this.category,
     this.aliases = const [],
     this.barcode,
+    this.stock = -1,
   });
+
+  /// Whether stock is being tracked for this product.
+  bool get isStockTracked => stock >= 0;
+
+  /// Whether this product is out of stock.
+  bool get isOutOfStock => isStockTracked && stock <= 0;
+
+  /// Whether this product has low stock (1-5 remaining).
+  bool get isLowStock => isStockTracked && stock > 0 && stock <= 5;
 
   /// Create Product from SQLite map.
   factory Product.fromMap(Map<String, dynamic> map) {
@@ -24,6 +35,7 @@ class Product {
       category: map['category'] ?? 'other',
       aliases: (map['aliases'] as String?)?.split(',').where((a) => a.trim().isNotEmpty).toList() ?? [],
       barcode: map['barcode'],
+      stock: (map['stock'] as int?) ?? -1,
     );
   }
 
@@ -37,6 +49,7 @@ class Product {
       'category': category,
       'aliases': aliases.join(','),
       'barcode': barcode,
+      'stock': stock,
       'is_active': 1,
       'created_at': DateTime.now().toIso8601String(),
     };
@@ -50,6 +63,7 @@ class Product {
     String? category,
     List<String>? aliases,
     String? barcode,
+    int? stock,
   }) {
     return Product(
       id: id ?? this.id,
@@ -58,6 +72,7 @@ class Product {
       category: category ?? this.category,
       aliases: aliases ?? this.aliases,
       barcode: barcode ?? this.barcode,
+      stock: stock ?? this.stock,
     );
   }
 

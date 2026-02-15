@@ -53,6 +53,8 @@ class BaristaResponse {
         return _identifyCustomerResponse(result, activeCustomer, yangBiasa);
       case BaristaIntent.orderBiasa:
         return _orderBiasaResponse(activeCustomer, yangBiasa);
+      case BaristaIntent.checkStock:
+        return _checkStockResponse(result);
       case BaristaIntent.unknown:
         return _unknownResponse(result.rawText);
     }
@@ -297,6 +299,37 @@ class BaristaResponse {
       '${biasa.productName} buat $firstName, coming right up!',
       'Oke $firstName, ${biasa.productName}! Gw udah hafal!',
     ]);
+  }
+
+  /// Response for stock check
+  String _checkStockResponse(ParseResult result) {
+    final product = result.product;
+    if (product == null) {
+      return _pick([
+        'Produk mana yang mau dicek stoknya?',
+        'Hmm, gak nemu produknya. Coba sebut nama yang lebih jelas.',
+      ]);
+    }
+
+    if (!product.isStockTracked) {
+      return '${product.name}: stok tidak dilacak (unlimited).';
+    }
+
+    if (product.isOutOfStock) {
+      return _pick([
+        '${product.name} lagi habis nih!',
+        'Waduh, ${product.name} stoknya kosong!',
+      ]);
+    }
+
+    if (product.isLowStock) {
+      return _pick([
+        '${product.name} tinggal ${product.stock} lagi nih, mau restock?',
+        'Stok ${product.name}: ${product.stock} — udah mau habis!',
+      ]);
+    }
+
+    return 'Stok ${product.name}: ${product.stock} tersedia.';
   }
 
   /// Response when product is not found
