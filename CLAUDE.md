@@ -2,103 +2,198 @@
 
 ## Gambaran Proyek
 
-**HomeAI POS Voice** adalah sistem Point of Sale (POS) berbasis suara bertenaga AI untuk kedai kopi. Seluruh interaksi dilakukan melalui voice command. Arsitektur menggunakan 3 layer: **POS (mulut & tangan)** -> **LocalDB (buffer offline)** -> **ERP (otak bisnis)**.
+**HomeAI POS Voice** adalah sistem Point of Sale (POS) berbasis suara bertenaga AI untuk kedai kopi. Seluruh interaksi utama dilakukan melalui voice command, dengan fallback touch/keyboard. Sistem ini dirancang **offline-first** — semua transaksi disimpan lokal dulu (SQLite), lalu di-sync ke backend untuk data collection & ML training.
 
-**Status:** PoC dengan fitur lengkap — sell, checkout, cancel, cek stok, laporan, sync, login.
+**Status:** PoC lengkap — voice ordering, checkout, customer memory, laporan, tax, menu management.
+
+**Visi:** Semua sistem kedepannya AI-based. Data transaksi dikumpulkan untuk training ML (smart upselling, prediksi stok, analisis pelanggan).
 
 ## Tech Stack
 
 - **Bahasa:** Dart (SDK >=3.0.0 <4.0.0)
 - **Framework:** Flutter (mobile app)
-- **API Eksternal:** ERPNext/Frappe REST API (HTTP, token auth)
-- **Package manager:** `dart pub` / `flutter pub`
-- **Dependensi:** `http`, `crypto`, `path`, `path_provider`, `speech_to_text`
+- **Database:** SQLite (via `sqflite`) — offline-first
+- **Voice:** Google Speech-to-Text (via `speech_to_text`)
+- **State Management:** Provider pattern
+- **Package manager:** `flutter pub`
+- **Key Dependencies:** `http`, `crypto`, `sqflite`, `path_provider`, `speech_to_text`, `provider`, `shared_preferences`, `mobile_scanner`, `intl`
 
-## Arsitektur 3 Layer
+## Arsitektur
+
+### Arsitektur Saat Ini (v1 — Offline-First POS)
 
 ```
-  Layer 1: HomeAI POS (Voice Interface)
-  Mulut & tangan — terima suara, tampilkan respons
-            |
-  Layer 2: LocalDB (Offline Buffer)
-  Semua transaksi masuk sini dulu, jaga-jaga kalau ERP mati
-            |
-  Layer 3: ERP (Otak Bisnis)
-  Source of truth — master data, harga, stok, laporan
+POS App (Flutter, offline-first)
+        |
+   SQLite (local storage)
+        |
+  [Sync Engine — currently targets ERPNext, akan diganti]
 ```
+
+### Arsitektur Target (v2 — AI Data Pipeline)
+
+```
+  POS App (Flutter, offline-first, SQLite)
+              |
+        Background Sync
+              |
+        VPS (API sederhana)
+              |
+        Data Lake (untuk ML training)
+```
+
+**Perubahan kunci v1 → v2:**
+- **Hapus ERPNext** — terlalu berat dan kompleks untuk kebutuhan ini
+- **Sync ke VPS sendiri** — API REST sederhana di server sendiri
+- **Tujuan sync** — kumpulkan data transaksi untuk training ML nanti
+- **Data Lake** — penyimpanan jangka panjang untuk analisis & model training
 
 ### Alur Data
 
 ```
-VoiceInput -> IntentParser -> Intent -> RoleGatekeeper -> IntentExecutor -> LocalIntentPort -> LocalDB
-                                                                                                 |
-                                                                               SyncEngine (auto/manual)
-                                                                                                 |
-                                                                                            ERPClient
+VoiceInput / TouchInput
+        ↓
+  SttCorrector (fix Google STT errors)
+        ↓
+  BaristaParser (NLP: keyword + fuzzy matching)
+        ↓
+  ParseResult (intent, product, qty, payment, customer)
+        ↓
+  VoiceProvider._executeBarista()
+        ↓
+  CartProvider / CustomerProvider (state update)
+        ↓
+  SQLite (persist transaction)
+        ↓
+  SyncEngine → VPS API (background, auto-retry)
 ```
 
 ## Struktur Proyek
 
 ```
 lib/
-  main.dart                          # Flutter entry point (MaterialApp)
-  core/
-    auth_context.dart                # UserRole enum, AuthContext, AuthService (login + password SHA-256)
-    voice_command_coordinator.dart   # Orkestrator utama: login -> parse -> validate -> execute -> save
-    role_gatekeeper.dart             # allowIntent(role, intent) berbasis IntentType
-    erp_client.dart                  # HTTP client ke ERPNext (sales invoice, stok, health check)
-    service_provider.dart            # Singleton service provider (inisialisasi semua service)
-  intent/
-    intent.dart                      # Data class Intent (id, type, payload, createdAt)
-    intent_type.dart                 # IntentType enum (8 tipe)
-    intent_payload.dart              # Sealed class hierarchy (7 payload types)
-    intent_parser.dart               # Parser NL -> Intent (keyword matching + regex qty extraction)
-    intent_executor.dart             # Dispatch intent ke IntentPort, return pesan respons
-    intent_port.dart                 # Interface abstrak untuk eksekusi intent
-    mock_intent_port.dart            # Mock implementation untuk testing
-  db/
-    local_db.dart                    # LocalDB: cart, transaksi, stok, laporan (JSON file-based)
-    local_intent_port.dart           # IntentPort implementation berbasis LocalDB
-  sync/
-    sync_engine.dart                 # Auto-sync + manual sync ke ERP, status tracking
-  ui/
-    login_screen.dart                # Halaman login Flutter
-    pos_home_screen.dart             # Halaman utama POS (chat-style voice interface)
-    post_screen.dart                 # Re-export (backwards compat)
-  voice/
-    voice_input.dart                 # Handler input suara + callback respons
+  main.dart                              # Entry point: init services + MultiProvider setup
+  app/
+    pos_app.dart                         # MaterialApp root (routing: Login vs POS)
+    │
+    ├── models/
+    │   ├── product.dart                 # Product entity + sample seed data
+    │   ├── cart_item.dart               # Cart item (id, name, price, qty)
+    │   └── customer.dart                # Customer entity + FavoriteItem
+    │
+    ├── providers/
+    │   ├── cart_provider.dart            # Shopping cart state + checkout logic
+    │   ├── voice_provider.dart           # Voice input lifecycle + intent execution
+    │   ├── product_provider.dart         # Product CRUD + category filter
+    │   ├── customer_provider.dart        # Customer memory ("POS yang kenal pelanggan")
+    │   └── tax_provider.dart             # PB1 10% + PPN 11% tax calculation
+    │
+    ├── services/
+    │   ├── auth_service.dart             # Login/logout, SHA-256 password, SharedPrefs
+    │   ├── barista_parser.dart           # Local NLP: voice → ParseResult (intent+product+qty)
+    │   ├── barista_response.dart         # Fun barista-style response generator (Indonesian)
+    │   ├── stt_corrector.dart            # Post-processor fix STT errors (concatenation, EN→ID)
+    │   ├── erp_service.dart              # [LEGACY] ERPNext HTTP client — akan diganti VPS API
+    │   └── sync_service.dart             # [LEGACY] Offline sync ke ERPNext — akan diganti VPS sync
+    │
+    ├── screens/
+    │   ├── login_screen.dart             # Username/password login
+    │   ├── pos_screen.dart               # Main POS: ProductGrid + Cart + Voice + Status
+    │   ├── payment_screen.dart           # Payment method + amount + change calculator
+    │   ├── receipt_screen.dart           # Thermal-style digital receipt (struk)
+    │   ├── history_screen.dart           # Transaction history + pending sync list
+    │   ├── transaction_detail_screen.dart # Detail transaksi + retry sync
+    │   ├── report_screen.dart            # Sales report + date filter + CSV export
+    │   └── menu_management_screen.dart   # CRUD produk (admin)
+    │
+    ├── widgets/
+    │   ├── voice_button.dart             # Mic button (idle/listening/processing) + text fallback
+    │   ├── cart_list.dart                # Cart items list + swipe-to-delete + qty spinner
+    │   ├── product_grid.dart             # Product grid (responsive: 2-3 cols)
+    │   ├── product_search.dart           # Live search products by name/alias
+    │   ├── status_display.dart           # Status bar (voice state, barista msg, customer badge)
+    │   ├── sync_indicator.dart           # Sync status badge + manual sync
+    │   └── barcode_scanner.dart          # Camera barcode/QR scanner
+    │
+    ├── database/
+    │   └── database_helper.dart          # SQLite manager (schema v6, migrations, CRUD)
+    │
+    └── theme/
+        └── app_theme.dart                # Material Design 3 (light + dark)
+
+core/                                     # [LEGACY] Old non-Flutter implementation — tidak dipakai
 bin/
-  demo.dart                          # CLI demo mode (tanpa Flutter)
+  demo.dart                               # CLI demo mode (tanpa Flutter)
 ```
 
-## Intent Types
+## Fitur Utama
 
-| IntentType   | Contoh Voice Command                | Role Minimum |
-|-------------|-------------------------------------|-------------|
-| `login`      | "login admin admin123"              | Semua       |
-| `sellItem`   | "jual kopi susu 2", "tambah latte"  | barista     |
-| `checkout`   | "bayar qris", "checkout"            | barista     |
-| `cancelItem` | "batal americano", "cancel"         | barista     |
-| `checkStock` | "cek stok", "stok matcha"           | spv         |
-| `dailyReport`| "laporan", "rekap"                  | spv         |
-| `syncManual` | "sync", "sinkron"                   | spv         |
-| `unknown`    | (tidak dikenali)                    | -           |
+### 1. Voice Ordering (Barista Parser)
+- **Input:** Voice command dalam bahasa Indonesia
+- **NLP:** Keyword matching + fuzzy product matching (Levenshtein distance)
+- **STT Corrector:** Fix Google errors ("susudua" → "susu dua", "coffee" → "kopi")
+- **Contoh:** "jual kopi susu 2", "tambah latte", "batal americano"
 
-## Hak Akses (Role-Based)
+### 2. Customer Memory System ("POS yang kenal pelanggan")
+- **Identifikasi:** "gw Andi" / "nama saya Budi" → recognize atau register customer baru
+- **Yang biasa:** "yang biasa" → auto-add top favorite ke cart (produk yang dipesan 2+ kali)
+- **Tracking:** Visit count, last visit, linked transactions
+- **Badge:** Customer badge tampil di StatusDisplay saat aktif
+- **Checkout:** Otomatis link transaksi ke active customer + record visit
 
-| Peran   | Akses                                          |
-|---------|------------------------------------------------|
-| barista | sellItem, checkout, cancelItem                  |
-| spv     | semua barista + checkStock, dailyReport, sync   |
-| owner   | full access                                     |
-| admin   | full access                                     |
+### 3. Tax System (PB1 + PPN)
+- **PB1:** Pajak Restoran/Hiburan 10%
+- **PPN:** Pajak Pertambahan Nilai 11%
+- **Configurable:** On/off per jenis pajak, rate bisa diubah
+- **Persisted:** Settings disimpan di SQLite
+
+### 4. Checkout & Payment
+- **Methods:** Cash, QRIS, Transfer, Card
+- **Cash:** Hitung kembalian otomatis, quick amount buttons
+- **Receipt:** Thermal-style digital struk (print & share)
+- **Voice:** "bayar qris" / "checkout" via voice command
+
+### 5. Reporting & History
+- **Laporan:** Sales report + date filter (hari ini/kemarin/minggu/bulan/custom)
+- **Metrics:** Total sales, transaction count, top products, tax breakdown
+- **Export:** CSV via Share
+- **History:** All transactions + pending sync list
+
+### 6. Menu Management
+- **CRUD:** Add/edit/delete produk dari SQLite
+- **Categories:** drink, food, snack, other
+- **Fields:** Name, price, category, barcode, aliases (untuk voice matching)
+
+## Database Schema (SQLite v6)
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Cashier login (username, password_hash, name, role, is_active) |
+| `products` | Product catalog (item_code, name, price, category, aliases, barcode) |
+| `categories` | Product categories (food, drink, snack, other) |
+| `transactions` | Sales orders (subtotal, taxes, total, payment_method, customer_id, sync_status) |
+| `transaction_items` | Order line items (product_id, quantity, price, subtotal) |
+| `customers` | Customer memory (name, phone, visit_count, last_visit_at) |
+| `sync_queue` | Failed sync retry queue |
+| `settings` | Key-value config store |
+
+## Voice Commands (BaristaParser Intents)
+
+| Intent | Contoh Voice Command | Action |
+|--------|---------------------|--------|
+| `addItem` | "jual kopi susu 2", "tambah latte" | Add product to cart |
+| `checkout` | "bayar qris", "checkout", "bayar cash" | Process payment |
+| `removeItem` | "batal americano", "hapus latte" | Remove from cart |
+| `clearCart` | "batal semua", "kosongkan" | Clear entire cart |
+| `identifyCustomer` | "gw Andi", "nama saya Budi" | Recognize/register customer |
+| `orderBiasa` | "yang biasa", "pesanan biasa" | Auto-add customer favorites |
+| `greeting` | "halo", "pagi" | Fun barista response |
 
 ## Auth System
 
 - Password di-hash dengan SHA-256 (`package:crypto`)
-- Default admin: **username:** `admin`, **password:** `admin123`
-- Login via UI form atau voice: `"login [username] [password]"`
-- Semua perintah selain login butuh autentikasi
+- Login via UI form — voice login deprecated untuk keamanan
+- Session persist via SharedPreferences
 
 ### Default Users
 
@@ -107,32 +202,6 @@ bin/
 | admin     | admin123    | admin   |
 | barista1  | barista123  | barista |
 | spv       | spv123      | spv     |
-
-## LocalDB
-
-- **Storage:** JSON file-based di folder `.homeai_db/`
-- **Files:** `transactions.json`, `stock.json`
-- **Cart:** In-memory, auto-merge item yang sama
-- **Transaction status:** `pending` -> `synced` / `failed`
-- **Offline-first:** Semua operasi simpan ke LocalDB dulu, sync ke ERP belakangan
-- **Reset:** `LocalDB.reset()` untuk hapus semua data
-
-## Sync Engine
-
-- **Auto-sync:** Berjalan otomatis tiap 30 detik
-- **Manual sync:** Via voice command `"sync"` atau `"sinkron"`
-- **Retry:** Transaksi `failed` bisa di-sync ulang via `syncAll()`
-- **Status:** `getStatus()` menunjukkan pending count, failed count, sync state
-
-## Integrasi ERP
-
-`ERPClient` terhubung ke instance ERPNext:
-
-- **Sales Invoice:** `POST {baseUrl}/api/resource/Sales Invoice`
-- **Stock:** `GET {baseUrl}/api/resource/Bin`
-- **Health Check:** `GET {baseUrl}/api/method/frappe.auth.get_logged_user`
-- **Auth:** `Authorization: token {apiKey}:{apiSecret}`
-- **Env vars:** `ERP_BASE_URL`, `ERP_API_KEY`, `ERP_API_SECRET`
 
 ## Perintah Umum
 
@@ -143,29 +212,51 @@ flutter pub get
 # Menjalankan aplikasi Flutter
 flutter run
 
-# Menjalankan CLI demo (tanpa Flutter)
-dart run bin/demo.dart
+# Menjalankan di device tertentu
+flutter run -d <device_id>
 
 # Menganalisis kode
 flutter analyze
+
+# Build APK
+flutter build apk --release
 ```
 
 ## Konvensi
 
 - **Bahasa kode:** Identifier dalam bahasa Inggris, string user-facing dalam bahasa Indonesia
-- **Gaya commit:** Conventional commits — `feat(scope):`, `refactor(scope):`, dll.
-- **DI:** Constructor-based dependency injection + ServiceProvider singleton
-- **Error:** Exception dengan kode berprefix (contoh: `ERP_SALES_INVOICE_FAILED`)
-- **Offline-first:** Semua transaksi masuk LocalDB dulu, baru sync ke ERP
-- **Arsitektur:** Ports and Adapters (hexagonal) — IntentPort sebagai boundary
+- **Gaya commit:** Conventional commits — `feat(scope):`, `fix(scope):`, `refactor(scope):`, dll.
+- **State management:** Provider pattern (ChangeNotifier + Consumer/context.read)
+- **DI:** Constructor-based + singleton services (AuthService, SyncService, ErpService)
+- **Offline-first:** Semua transaksi masuk SQLite dulu, sync ke backend belakangan
+- **Error handling:** Try-catch di provider level, user-facing messages via StatusDisplay
+
+## Known Issues / Technical Debt
+
+- `lib/core/` — old non-Flutter implementation, masih ada tapi tidak dipakai
+- `erp_service.dart` + `sync_service.dart` — masih target ERPNext, perlu diganti ke VPS API
+- Voice login dihapus dari UI tapi parser masih support — cleanup needed
+- No test suite yet
 
 ## Roadmap
 
-- [ ] Upgrade parser ke LLM-based (conversational, bukan keyword matching)
-- [x] Flutter UI (login + POS screen)
-- [ ] Speech-to-text integration
-- [ ] Tambah test suite
+### Short-term (Segera)
+- [ ] Ganti ERPNext sync → VPS API sederhana (REST)
+- [ ] Design VPS API schema untuk data collection
+- [ ] Cleanup legacy `lib/core/` folder
+- [ ] Tambah test suite (unit + widget tests)
 - [ ] Tambah `analysis_options.yaml` untuk linting
-- [ ] Migrasi LocalDB ke SQLite/Isar untuk performa
-- [ ] Smart upselling (AI suggest berdasarkan history)
-- [ ] Multi-modal input (voice + touch)
+
+### Medium-term (Setelah VPS ready)
+- [ ] Data Lake setup di VPS untuk ML training data
+- [ ] Upgrade parser ke LLM-based (conversational, bukan keyword matching)
+- [ ] Smart upselling (AI suggest berdasarkan history pelanggan)
+- [ ] Prediksi stok berdasarkan pattern penjualan
+- [ ] Multi-modal input (voice + touch lebih seamless)
+
+### Long-term (AI-based everything)
+- [ ] Full AI barista (conversational ordering via LLM)
+- [ ] Customer behavior analysis (ML model dari data lake)
+- [ ] Dynamic pricing suggestions
+- [ ] Inventory auto-reorder
+- [ ] Multi-outlet support + centralized analytics
